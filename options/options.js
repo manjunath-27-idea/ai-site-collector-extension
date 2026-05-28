@@ -62,7 +62,7 @@ const docSearch = document.getElementById('docSearch');
 const docList = document.getElementById('docList');
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
+function init() {
     setupEventListeners();
     switchPanel('sites');
     loadSites();
@@ -70,7 +70,13 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSelectedDocument();
     loadSettings();
     loadCustomKeywords();
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
 
 /**
  * Check authentication status and toggle Auth Guard Panel
@@ -212,11 +218,13 @@ function setupEventListeners() {
     });
 
     // Modal background click to close
-    docSelectorModal.addEventListener('click', (e) => {
-        if (e.target === docSelectorModal) {
-            docSelectorModal.classList.remove('active');
-        }
-    });
+    if (docSelectorModal) {
+        docSelectorModal.addEventListener('click', (e) => {
+            if (e.target === docSelectorModal) {
+                docSelectorModal.classList.remove('active');
+            }
+        });
+    }
 }
 
 /**
@@ -452,7 +460,7 @@ function loadSelectedDocument() {
  * Open document selector modal
  */
 function openDocSelector() {
-    docSelectorModal.classList.add('active');
+    if (docSelectorModal) docSelectorModal.classList.add('active');
     loadDriveFiles();
 }
 
@@ -524,7 +532,7 @@ function selectDocument(docId, docName) {
         if (response.success) {
             docNameDisplay.textContent = `📄 ${docName}`;
             updateSyncStatus(response.message);
-            docSelectorModal.classList.remove('active');
+            if (docSelectorModal) docSelectorModal.classList.remove('active');
             loadSelectedDocument();
         }
     });

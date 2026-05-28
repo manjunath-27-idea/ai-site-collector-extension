@@ -45,14 +45,20 @@ const aiKeywordsTags = document.getElementById('aiKeywordsTags');
 const usefulKeywordsTags = document.getElementById('usefulKeywordsTags');
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
+function init() {
     loadSites();
     setupEventListeners();
     checkAuthStatus();
     loadSelectedDocument();
     loadSettings();
     loadCustomKeywords();
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
 
 /**
  * Setup event listeners
@@ -114,11 +120,13 @@ function setupEventListeners() {
 
     // Close modal when clicking outside
     [settingsModal, docSelectorModal].forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.classList.remove('active');
-            }
-        });
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        }
     });
 }
 
@@ -237,7 +245,7 @@ function loadSelectedDocument() {
  * Open document selector modal
  */
 function openDocSelector() {
-    docSelectorModal.classList.add('active');
+    if (docSelectorModal) docSelectorModal.classList.add('active');
     loadDriveFiles();
 }
 
@@ -309,7 +317,7 @@ function selectDocument(docId, docName) {
         if (response.success) {
             docNameDisplay.textContent = `📄 ${docName}`;
             updateSyncStatus(response.message);
-            docSelectorModal.classList.remove('active');
+            if (docSelectorModal) docSelectorModal.classList.remove('active');
             loadSelectedDocument();
         }
     });
