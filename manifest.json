@@ -9,7 +9,8 @@
     "scripting",
     "activeTab",
     "identity",
-    "identity.email"
+    "identity.email",
+    "notifications"
   ],
   "host_permissions": [
     "<all_urls>"

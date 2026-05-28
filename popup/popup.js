@@ -71,7 +71,7 @@ function setupEventListeners() {
     dashboardBtn.addEventListener('click', () => {
         chrome.runtime.openOptionsPage();
     });
-    if (selectDocBtn) selectDocBtn.addEventListener('click', openDocSelector);
+    // selectDocBtn removed — drive file is auto-managed, no manual selection
     popupLogoutBtn.addEventListener('click', logout);
     popupSyncBtn.addEventListener('click', syncToDrive);
     popupSignInBtn.addEventListener('click', authenticate);
@@ -103,9 +103,7 @@ function setupEventListeners() {
     closeButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
             const modal = e.target.closest('.modal');
-            if (modal) {
-                modal.classList.remove('active');
-            }
+            if (modal) modal.classList.remove('active');
         });
     });
 
@@ -118,13 +116,11 @@ function setupEventListeners() {
         });
     });
 
-    // Close modal when clicking outside
-    [settingsModal, docSelectorModal].forEach(modal => {
+    // Close modal when clicking outside — only when modal exists in DOM
+    [settingsModal].forEach(modal => {
         if (modal) {
             modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.classList.remove('active');
-                }
+                if (e.target === modal) modal.classList.remove('active');
             });
         }
     });
@@ -326,15 +322,23 @@ function selectDocument(docId, docName) {
 /**
  * Render sites list
  */
+/**
+ * Render sites list with multi-token ranked search
+ */
 function renderSites() {
     sitesList.innerHTML = '';
 
+    const rawQuery = '';
+    // (Popup has no search bar — category filter only)
     let filteredSites = sites;
     if (currentFilter === 'ai') {
-        filteredSites = sites.filter(s => s.classification.isAI);
+        filteredSites = sites.filter(s => s.classification && s.classification.isAI);
     } else if (currentFilter === 'useful') {
-        filteredSites = sites.filter(s => s.classification.isUseful && !s.classification.isAI);
+        filteredSites = sites.filter(s => s.classification && s.classification.isUseful && !s.classification.isAI);
     }
+
+    // Sort: newest first
+    filteredSites = [...filteredSites].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
 
     if (filteredSites.length === 0) {
         emptyState.style.display = 'flex';
@@ -342,12 +346,12 @@ function renderSites() {
     }
 
     emptyState.style.display = 'none';
-
     filteredSites.forEach(site => {
         const siteEl = createSiteElement(site);
         sitesList.appendChild(siteEl);
     });
 }
+
 
 /**
  * Extract features from site

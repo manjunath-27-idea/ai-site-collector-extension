@@ -387,26 +387,28 @@ function extractFeatures(site) {
  */
 function generateDocumentContent(sites) {
   const timestamp = new Date().toLocaleString();
-  let content = `\n\n${'='.repeat(80)}\n`;
-  content += `COLLECTION UPDATE: ${timestamp}\n`;
-  content += `Total Sites Added: ${sites.length}\n`;
-  content += `${'='.repeat(80)}\n\n`;
-  
+  const line80 = '='.repeat(80);
+  let content = `\n\n${line80}\n`;
+  content += `SYNC UPDATE — ${timestamp}\n`;
+  content += `Sites in this batch: ${sites.length}\n`;
+  content += `${line80}\n\n`;
+
   sites.forEach((site, index) => {
-    const features = extractFeatures(site);
-    const type = site.classification.isAI ? 'AI' : 'Useful';
-    const confidence = Math.round(site.classification.confidence * 100);
-    
+    const category = site.classification.isAI ? '🤖 AI Platform' : '🔧 Useful Tool';
+    const confidence = Math.round((site.classification.confidence || 0) * 100);
+    const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
+    // Use the clean description from the knowledge base if available
+    const description = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
+
     content += `${index + 1}. ${site.title}\n`;
-    content += `   URL: ${site.url}\n`;
-    content += `   Type: ${type}\n`;
-    content += `   Confidence: ${confidence}%\n`;
-    content += `   Description: ${site.description || 'N/A'}\n`;
-    content += `   Features: ${features.join(', ') || 'N/A'}\n`;
-    content += `   Saved: ${new Date(site.savedAt).toLocaleString()}\n`;
+    content += `   URL         : ${site.url}\n`;
+    content += `   Category    : ${category}\n`;
+    content += `   Description : ${description}\n`;
+    content += `   Confidence  : ${confidence}%\n`;
+    content += `   Saved       : ${savedDate}\n`;
     content += `\n`;
   });
-  
+
   return content;
 }
 

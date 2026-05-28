@@ -169,8 +169,8 @@ function setupEventListeners() {
     sidebarSyncBtn.addEventListener('click', syncToDrive);
     syncBtn.addEventListener('click', syncToDrive);
     clearBtn.addEventListener('click', clearAllSites);
-    if (selectDocBtn) selectDocBtn.addEventListener('click', openDocSelector);
-    if (closeDocModalBtn) closeDocModalBtn.addEventListener('click', () => docSelectorModal.classList.remove('active'));
+    // selectDocBtn removed: drive file is auto-managed, no manual selection needed
+    if (closeDocModalBtn) closeDocModalBtn.addEventListener('click', () => docSelectorModal && docSelectorModal.classList.remove('active'));
     if (docSearch) docSearch.addEventListener('input', filterDocuments);
 
     // Sidebar menu clicks
@@ -322,42 +322,80 @@ function loadSites() {
 /**
  * Render sites grid with filters and search
  */
+/**
+ * Render sites grid with multi-token ranked search
+ * Tokens: query split by whitespace — ALL tokens must match
+ * Ranked: title match > url match > description/tags match
+ */
 function renderSites() {
     sitesGrid.innerHTML = '';
 
-    const query = sitesSearch.value.trim().toLowerCase();
-    
-    // 1. Filter by category
+    const rawQuery = sitesSearch.value.trim().toLowerCase();
+    const tokens = rawQuery ? rawQuery.split(/\s+/) : [];
+
+    // 1. Category filter
     let filtered = sites;
     if (currentFilter === 'ai') {
-        filtered = sites.filter(s => s.classification.isAI);
+        filtered = sites.filter(s => s.classification && s.classification.isAI);
     } else if (currentFilter === 'useful') {
-        filtered = sites.filter(s => s.classification.isUseful && !s.classification.isAI);
+        filtered = sites.filter(s => s.classification && s.classification.isUseful && !s.classification.isAI);
     }
 
-    // 2. Filter by search input
-    if (query) {
-        filtered = filtered.filter(s => 
-            s.title.toLowerCase().includes(query) ||
-            s.url.toLowerCase().includes(query) ||
-            (s.description && s.description.toLowerCase().includes(query))
+    // 2. Multi-token search with relevance scoring
+    if (tokens.length > 0) {
+        const scored = filtered.map(site => {
+            const titleLow = (site.title || '').toLowerCase();
+            const urlLow = (site.url || '').toLowerCase();
+            const descLow = (site.description || '').toLowerCase();
+            const tagsLow = [
+                ...(site.classification && site.classification.reasons ? site.classification.reasons : []),
+                ...(site.keywords || [])
+            ].join(' ').toLowerCase();
+
+            // Every token must appear somewhere in the site data
+            const allMatch = tokens.every(tok =>
+                titleLow.includes(tok) ||
+                urlLow.includes(tok) ||
+                descLow.includes(tok) ||
+                tagsLow.includes(tok)
+            );
+            if (!allMatch) return null;
+
+            // Relevance score: title hits weighted highest
+            let score = 0;
+            tokens.forEach(tok => {
+                if (titleLow.includes(tok)) score += 10;
+                if (urlLow.includes(tok)) score += 4;
+                if (descLow.includes(tok)) score += 2;
+                if (tagsLow.includes(tok)) score += 1;
+            });
+
+            return { site, score };
+        }).filter(Boolean);
+
+        // Sort by relevance desc, then by savedAt desc
+        scored.sort((a, b) =>
+            b.score - a.score ||
+            new Date(b.site.savedAt) - new Date(a.site.savedAt)
         );
+        filtered = scored.map(s => s.site);
+    } else {
+        // No query: sort newest first
+        filtered = [...filtered].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
     }
 
-    // Show empty state if none matched
     if (filtered.length === 0) {
         emptyState.style.display = 'flex';
         return;
     }
 
     emptyState.style.display = 'none';
-
-    // Render cards
     filtered.forEach(site => {
         const card = createSiteCard(site);
         sitesGrid.appendChild(card);
     });
 }
+
 
 /**
  * Extract tags from classification and keywords
