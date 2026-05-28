@@ -1,0 +1,589 @@
+/**
+ * Popup Script - Handles UI interactions and data visualization
+ * Single document mode: All sites appended to one selected document
+ */
+
+let sites = [];
+let currentFilter = 'all';
+let charts = {};
+let allDriveFiles = [];
+
+// DOM Elements
+const authSection = document.getElementById('authSection');
+const sitesSection = document.getElementById('sitesSection');
+const sitesList = document.getElementById('sitesList');
+const emptyState = document.getElementById('emptyState');
+const authBtn = document.getElementById('authBtn');
+const syncBtn = document.getElementById('syncBtn');
+const clearBtn = document.getElementById('clearBtn');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModal = document.getElementById('settingsModal');
+const docSelectorModal = document.getElementById('docSelectorModal');
+const selectDocBtn = document.getElementById('selectDocBtn');
+const docNameDisplay = document.getElementById('docNameDisplay');
+const docList = document.getElementById('docList');
+const docSearch = document.getElementById('docSearch');
+const closeButtons = document.querySelectorAll('.close-btn');
+const logoutBtn = document.getElementById('logoutBtn');
+const syncStatus = document.getElementById('syncStatus');
+const filterBtns = document.querySelectorAll('.filter-btn');
+const tabBtns = document.querySelectorAll('.tab-btn');
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadSites();
+    setupEventListeners();
+    checkAuthStatus();
+    loadSelectedDocument();
+});
+
+/**
+ * Setup event listeners
+ */
+function setupEventListeners() {
+    authBtn.addEventListener('click', authenticate);
+    syncBtn.addEventListener('click', syncToDrive);
+    clearBtn.addEventListener('click', clearAllSites);
+    settingsBtn.addEventListener('click', openSettings);
+    selectDocBtn.addEventListener('click', openDocSelector);
+    logoutBtn.addEventListener('click', logout);
+    docSearch.addEventListener('input', filterDocuments);
+
+    closeButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const modal = e.target.closest('.modal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        });
+    });
+
+    filterBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            filterBtns.forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentFilter = e.target.dataset.filter;
+            renderSites();
+        });
+    });
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const tabName = e.currentTarget.dataset.tab;
+            switchTab(tabName);
+        });
+    });
+
+    // Close modal when clicking outside
+    [settingsModal, docSelectorModal].forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+            }
+        });
+    });
+}
+
+/**
+ * Switch tabs
+ */
+function switchTab(tabName) {
+    // Update tab buttons
+    tabBtns.forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`${tabName}-tab`).classList.add('active');
+
+    // Initialize charts if switching to stats tab
+    if (tabName === 'stats') {
+        setTimeout(initializeCharts, 100);
+    }
+}
+
+/**
+ * Check authentication status
+ */
+function checkAuthStatus() {
+    chrome.storage.local.get('isAuthenticated', (result) => {
+        if (result.isAuthenticated) {
+            showSitesSection();
+        } else {
+            showAuthSection();
+        }
+    });
+}
+
+/**
+ * Show auth section
+ */
+function showAuthSection() {
+    authSection.style.display = 'flex';
+    sitesSection.style.display = 'none';
+}
+
+/**
+ * Show sites section
+ */
+function showSitesSection() {
+    authSection.style.display = 'none';
+    sitesSection.style.display = 'flex';
+    loadSites();
+}
+
+/**
+ * Authenticate with Google
+ */
+function authenticate() {
+    authBtn.disabled = true;
+    authBtn.textContent = 'Authenticating...';
+
+    chrome.runtime.sendMessage({ action: 'authenticate' }, (response) => {
+        if (response.success) {
+            showSitesSection();
+            updateSyncStatus(`Authenticated as ${response.email}`);
+        } else {
+            updateSyncStatus(`Error: ${response.error}`);
+        }
+        authBtn.disabled = false;
+        authBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"></path>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"></path>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"></path>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"></path>
+            </svg>
+            Sign in with Google
+        `;
+    });
+}
+
+/**
+ * Load sites from storage
+ */
+function loadSites() {
+    chrome.runtime.sendMessage({ action: 'getSites' }, (response) => {
+        sites = response.sites || [];
+        renderSites();
+        updateStats();
+    });
+}
+
+/**
+ * Load selected document info
+ */
+function loadSelectedDocument() {
+    chrome.runtime.sendMessage({ action: 'getDriveDocument' }, (response) => {
+        if (response.docId && response.docName) {
+            docNameDisplay.textContent = `📄 ${response.docName}`;
+            docNameDisplay.parentElement.style.display = 'block';
+        } else {
+            docNameDisplay.textContent = 'No document selected';
+            docNameDisplay.parentElement.style.display = 'block';
+        }
+    });
+}
+
+/**
+ * Open document selector modal
+ */
+function openDocSelector() {
+    docSelectorModal.classList.add('active');
+    loadDriveFiles();
+}
+
+/**
+ * Load Google Drive files
+ */
+function loadDriveFiles() {
+    docList.innerHTML = '<p class="loading">Loading documents...</p>';
+    
+    chrome.runtime.sendMessage({ action: 'listDriveFiles' }, (response) => {
+        if (response.success) {
+            allDriveFiles = response.files || [];
+            renderDocumentList(allDriveFiles);
+        } else {
+            docList.innerHTML = `<p class="error">Error: ${response.error}</p>`;
+        }
+    });
+}
+
+/**
+ * Render document list
+ */
+function renderDocumentList(files) {
+    if (files.length === 0) {
+        docList.innerHTML = '<p class="empty">No documents found in your Drive</p>';
+        return;
+    }
+
+    docList.innerHTML = files.map(file => `
+        <div class="doc-item" data-id="${file.id}" data-name="${file.name}">
+            <div class="doc-info">
+                <div class="doc-name">${escapeHtml(file.name)}</div>
+                <div class="doc-type">${file.mimeType}</div>
+            </div>
+            <button class="select-doc-btn" onclick="selectDocument('${file.id}', '${file.name}')">Select</button>
+        </div>
+    `).join('');
+}
+
+/**
+ * Filter documents
+ */
+function filterDocuments() {
+    const query = docSearch.value.toLowerCase();
+    const filtered = allDriveFiles.filter(file => 
+        file.name.toLowerCase().includes(query)
+    );
+    renderDocumentList(filtered);
+}
+
+/**
+ * Select document
+ */
+function selectDocument(docId, docName) {
+    chrome.runtime.sendMessage({ 
+        action: 'setDriveDocument', 
+        docId: docId,
+        docName: docName
+    }, (response) => {
+        if (response.success) {
+            docNameDisplay.textContent = `📄 ${docName}`;
+            updateSyncStatus(response.message);
+            docSelectorModal.classList.remove('active');
+            loadSelectedDocument();
+        }
+    });
+}
+
+/**
+ * Render sites list
+ */
+function renderSites() {
+    sitesList.innerHTML = '';
+
+    let filteredSites = sites;
+    if (currentFilter === 'ai') {
+        filteredSites = sites.filter(s => s.classification.isAI);
+    } else if (currentFilter === 'useful') {
+        filteredSites = sites.filter(s => s.classification.isUseful && !s.classification.isAI);
+    }
+
+    if (filteredSites.length === 0) {
+        emptyState.style.display = 'flex';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+
+    filteredSites.forEach(site => {
+        const siteEl = createSiteElement(site);
+        sitesList.appendChild(siteEl);
+    });
+}
+
+/**
+ * Extract features from site
+ */
+function extractFeatures(site) {
+    const features = [];
+    
+    // Extract from classification reasons
+    if (site.classification.reasons && Array.isArray(site.classification.reasons)) {
+        features.push(...site.classification.reasons);
+    }
+    
+    // Extract from keywords
+    if (site.keywords && Array.isArray(site.keywords) && site.keywords.length > 0) {
+        features.push(...site.keywords.slice(0, 3));
+    }
+    
+    // Remove duplicates and limit to 5
+    return [...new Set(features)].slice(0, 5);
+}
+
+/**
+ * Create site element
+ */
+function createSiteElement(site) {
+    const div = document.createElement('div');
+    div.className = 'site-item';
+
+    const type = site.classification.isAI ? 'AI' : 'Useful';
+    const typeClass = site.classification.isAI ? 'ai' : 'useful';
+    const confidence = Math.round(site.classification.confidence * 100);
+    const savedDate = new Date(site.savedAt).toLocaleDateString();
+    const features = extractFeatures(site);
+
+    div.innerHTML = `
+        <div class="site-header">
+            <div class="site-title">${escapeHtml(site.title)}</div>
+            <span class="site-badge ${typeClass}">${type}</span>
+        </div>
+        <div class="site-description">${escapeHtml(site.description || 'No description available')}</div>
+        <div class="site-url">${escapeHtml(site.url)}</div>
+        ${features.length > 0 ? `<div class="site-features">
+            <strong>Features:</strong> ${features.map(f => `<span class="feature-tag">${escapeHtml(f)}</span>`).join('')}
+        </div>` : ''}
+        <div class="site-footer">
+            <span>${savedDate}</span>
+            <div class="confidence">
+                <span>${confidence}%</span>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: ${confidence}%"></div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    div.addEventListener('click', () => {
+        chrome.tabs.create({ url: site.url });
+    });
+
+    return div;
+}
+
+/**
+ * Update statistics
+ */
+function updateStats() {
+    const aiSites = sites.filter(s => s.classification.isAI);
+    const usefulSites = sites.filter(s => s.classification.isUseful && !s.classification.isAI);
+
+    document.getElementById('totalCount').textContent = sites.length;
+    document.getElementById('aiCount').textContent = aiSites.length;
+    document.getElementById('usefulCount').textContent = usefulSites.length;
+}
+
+/**
+ * Initialize charts
+ */
+function initializeCharts() {
+    const aiSites = sites.filter(s => s.classification.isAI);
+    const usefulSites = sites.filter(s => s.classification.isUseful && !s.classification.isAI);
+
+    // Distribution Chart
+    const distCtx = document.getElementById('distributionChart');
+    if (distCtx) {
+        if (charts.distribution) charts.distribution.destroy();
+        charts.distribution = new Chart(distCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['AI Sites', 'Useful Sites'],
+                datasets: [{
+                    data: [aiSites.length, usefulSites.length],
+                    backgroundColor: ['#6366f1', '#8b5cf6'],
+                    borderColor: '#1e293b',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#cbd5e1',
+                            font: { size: 12 }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Confidence Chart
+    const confCtx = document.getElementById('confidenceChart');
+    if (confCtx) {
+        if (charts.confidence) charts.confidence.destroy();
+        const confidenceLevels = {
+            'High (80-100%)': sites.filter(s => s.classification.confidence >= 0.8).length,
+            'Medium (50-80%)': sites.filter(s => s.classification.confidence >= 0.5 && s.classification.confidence < 0.8).length,
+            'Low (<50%)': sites.filter(s => s.classification.confidence < 0.5).length
+        };
+
+        charts.confidence = new Chart(confCtx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(confidenceLevels),
+                datasets: [{
+                    label: 'Count',
+                    data: Object.values(confidenceLevels),
+                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                indexAxis: 'y',
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#cbd5e1' },
+                        grid: { color: '#334155' }
+                    },
+                    y: {
+                        ticks: { color: '#cbd5e1' }
+                    }
+                }
+            }
+        });
+    }
+
+    // Timeline Chart
+    const timeCtx = document.getElementById('timelineChart');
+    if (timeCtx) {
+        if (charts.timeline) charts.timeline.destroy();
+        const timelineData = getTimelineData();
+
+        charts.timeline = new Chart(timeCtx, {
+            type: 'line',
+            data: {
+                labels: timelineData.labels,
+                datasets: [{
+                    label: 'Sites Collected',
+                    data: timelineData.data,
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        labels: { color: '#cbd5e1' }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: { color: '#cbd5e1' },
+                        grid: { color: '#334155' }
+                    },
+                    x: {
+                        ticks: { color: '#cbd5e1' },
+                        grid: { color: '#334155' }
+                    }
+                }
+            }
+        });
+    }
+}
+
+/**
+ * Get timeline data
+ */
+function getTimelineData() {
+    const last7Days = {};
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const key = date.toLocaleDateString();
+        last7Days[key] = 0;
+    }
+
+    sites.forEach(site => {
+        const date = new Date(site.savedAt).toLocaleDateString();
+        if (date in last7Days) {
+            last7Days[date]++;
+        }
+    });
+
+    return {
+        labels: Object.keys(last7Days),
+        data: Object.values(last7Days)
+    };
+}
+
+/**
+ * Sync to Google Drive
+ */
+function syncToDrive() {
+    syncBtn.disabled = true;
+    updateSyncStatus('Syncing...');
+
+    chrome.runtime.sendMessage({ action: 'syncToDrive' }, (response) => {
+        if (response.success) {
+            updateSyncStatus(response.message);
+        } else {
+            updateSyncStatus(`Sync failed: ${response.error}`);
+        }
+        syncBtn.disabled = false;
+    });
+}
+
+/**
+ * Clear all sites
+ */
+function clearAllSites() {
+    if (confirm('Are you sure you want to delete all collected sites?')) {
+        chrome.storage.local.set({ sites: [] });
+        sites = [];
+        renderSites();
+        updateStats();
+        updateSyncStatus('All sites cleared');
+    }
+}
+
+/**
+ * Open settings modal
+ */
+function openSettings() {
+    settingsModal.classList.add('active');
+}
+
+/**
+ * Logout
+ */
+function logout() {
+    chrome.storage.local.set({
+        isAuthenticated: false,
+        authToken: null,
+        userEmail: null,
+        driveDocId: null,
+        driveDocName: null
+    });
+    settingsModal.classList.remove('active');
+    showAuthSection();
+}
+
+/**
+ * Update sync status
+ */
+function updateSyncStatus(message) {
+    syncStatus.textContent = message;
+    setTimeout(() => {
+        syncStatus.textContent = 'Ready';
+    }, 3000);
+}
+
+/**
+ * Escape HTML
+ */
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// Listen for storage changes
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.sites) {
+        loadSites();
+    }
+});
