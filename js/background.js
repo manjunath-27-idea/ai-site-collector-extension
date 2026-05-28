@@ -151,14 +151,18 @@ function authenticateWithGoogle(sendResponse) {
  * List files in Google Drive
  */
 function listDriveFiles(token, sendResponse) {
+  const REQUIRED_FILENAME = 'AI_Site_Collector_Database.txt';
   fetch('https://www.googleapis.com/drive/v3/files?pageSize=50&fields=files(id,name,mimeType,modifiedTime)&q=trashed=false&orderBy=modifiedTime%20desc', {
     headers: { Authorization: 'Bearer ' + token }
   })
   .then(response => response.json())
   .then(data => {
+    // SECURITY MEASURE: Filter files to strictly only allow selection/listing of 'AI_Site_Collector_Database.txt'
+    const files = data.files || [];
+    const filteredFiles = files.filter(f => f.name === REQUIRED_FILENAME);
     sendResponse({ 
       success: true, 
-      files: data.files || [] 
+      files: filteredFiles 
     });
   })
   .catch(error => {
@@ -173,6 +177,17 @@ function listDriveFiles(token, sendResponse) {
  * Set the Google Drive document for storage (single document mode)
  */
 function setDriveDocument(docId, docName, sendResponse) {
+  const REQUIRED_FILENAME = 'AI_Site_Collector_Database.txt';
+  
+  // SECURITY SANITIZATION: Hard security boundary checking
+  if (docName !== REQUIRED_FILENAME) {
+    sendResponse({
+      success: false,
+      error: `Security boundary error: Only the exact file name "${REQUIRED_FILENAME}" is accepted.`
+    });
+    return;
+  }
+
   chrome.storage.local.set({ 
     driveDocId: docId,
     driveDocName: docName
@@ -206,8 +221,14 @@ function syncToDrive(sendResponse) {
     }
 
     try {
+      const REQUIRED_FILENAME = 'AI_Site_Collector_Database.txt';
       let docId = result.driveDocId;
-      let docName = result.driveDocName || 'AI_Site_Collector_Database.txt';
+      let docName = result.driveDocName || REQUIRED_FILENAME;
+      
+      // SECURITY COMPLIANCE: Hard validation to block writes to any other file name
+      if (docName !== REQUIRED_FILENAME) {
+        throw new Error(`Security validation failure: Unauthorized file name "${docName}". Only "${REQUIRED_FILENAME}" is permitted.`);
+      }
       
       // If no document is selected, dynamically discover or create one
       if (!docId) {
