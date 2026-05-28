@@ -187,7 +187,7 @@ function setDriveDocument(docId, docName, sendResponse) {
  * Sync collected sites to Google Drive (append to single document)
  */
 function syncToDrive(sendResponse) {
-  chrome.storage.local.get(['sites', 'authToken', 'driveDocId', 'driveDocName'], (result) => {
+  chrome.storage.local.get(['sites', 'authToken', 'driveDocId', 'driveDocName'], async (result) => {
     if (!result.authToken) {
       sendResponse({ 
         success: false, 
@@ -196,16 +196,7 @@ function syncToDrive(sendResponse) {
       return;
     }
 
-    if (!result.driveDocId) {
-      sendResponse({ 
-        success: false, 
-        error: 'No document selected. Please select a document first.' 
-      });
-      return;
-    }
-
     const sites = result.sites || [];
-    
     if (sites.length === 0) {
       sendResponse({ 
         success: false, 
@@ -213,25 +204,112 @@ function syncToDrive(sendResponse) {
       });
       return;
     }
-    
-    // Append sites to existing document
-    appendToDocument(result.authToken, result.driveDocId, sites)
-      .then(() => {
-        chrome.storage.local.set({ 
-          lastSync: new Date().toISOString()
-        });
-        sendResponse({ 
-          success: true, 
-          message: `${sites.length} sites appended to "${result.driveDocName}"`
-        });
-      })
-      .catch(error => {
-        sendResponse({ 
-          success: false, 
-          error: error.message 
-        });
+
+    try {
+      let docId = result.driveDocId;
+      let docName = result.driveDocName || 'AI_Site_Collector_Database.txt';
+      
+      // If no document is selected, dynamically discover or create one
+      if (!docId) {
+        console.log('[Drive Sync] No document selected. Auto-discovering or creating default sync document...');
+        docId = await getOrCreateDefaultDoc(result.authToken);
+      }
+      
+      // Append sites to the document
+      await appendToDocument(result.authToken, docId, sites);
+      
+      chrome.storage.local.set({ 
+        lastSync: new Date().toISOString()
       });
+      
+      sendResponse({ 
+        success: true, 
+        message: `${sites.length} sites successfully synced to "${docName}"`
+      });
+    } catch (error) {
+      sendResponse({ 
+        success: false, 
+        error: error.message 
+      });
+    }
   });
+}
+
+/**
+ * Automatically find or create the default sync document in Google Drive
+ */
+async function getOrCreateDefaultDoc(token) {
+  const fileName = 'AI_Site_Collector_Database.txt';
+  
+  // 1. Search for existing file with this name
+  const queryUrl = `https://www.googleapis.com/drive/v3/files?q=name='${fileName}'+and+trashed=false&fields=files(id,name)`;
+  const searchResponse = await fetch(queryUrl, {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  
+  if (!searchResponse.ok) {
+    throw new Error(`Failed to search Drive: ${searchResponse.statusText}`);
+  }
+  
+  const searchData = await searchResponse.json();
+  const files = searchData.files || [];
+  
+  if (files.length > 0) {
+    const existingDoc = files[0];
+    // Save to storage reactively
+    await new Promise((resolve) => {
+      chrome.storage.local.set({
+        driveDocId: existingDoc.id,
+        driveDocName: existingDoc.name
+      }, resolve);
+    });
+    return existingDoc.id;
+  }
+  
+  // 2. Create a new file if it does not exist
+  const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: fileName,
+      mimeType: 'text/plain'
+    })
+  });
+  
+  if (!createResponse.ok) {
+    throw new Error(`Failed to create Drive document: ${createResponse.statusText}`);
+  }
+  
+  const newFile = await createResponse.json();
+  const docId = newFile.id;
+  
+  // 3. Write initial header content to the newly created file
+  const initialContent = 'AI Site Collector - Secure Sync Database\n========================================\n\n';
+  const uploadResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Type': 'text/plain'
+    },
+    body: initialContent
+  });
+  
+  if (!uploadResponse.ok) {
+    throw new Error(`Failed to write initial content: ${uploadResponse.statusText}`);
+  }
+  
+  // Save to storage reactively
+  await new Promise((resolve) => {
+    chrome.storage.local.set({
+      driveDocId: docId,
+      driveDocName: fileName
+    }, resolve);
+  });
+  
+  return docId;
 }
 
 /**
