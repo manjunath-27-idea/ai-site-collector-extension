@@ -29,14 +29,14 @@ The extension will now:
 - ✅ Automatically detect AI and useful websites as you browse
 - ✅ Display them in the popup with descriptions
 - ✅ Let you sync to Google Drive with one click
-- ✅ Show analytics and statistics
+- ✅ Open Widescreen Dashboard for full search and keyword management
 
 ## First Steps
 
 1. **Browse some websites** - Visit AI platforms or useful tools
 2. **Check the popup** - Click the extension icon to see collected sites
 3. **Sync to Drive** - Click "Sync to Drive" to save to Google Drive
-4. **View stats** - Click "Stats" tab to see analytics
+4. **Open Widescreen Dashboard** - Click the grid dashboard icon in the popup header to manage, search, delete, and add custom scanner keywords in a fullscreen workspace tab!
 
 ## Need Help?
 

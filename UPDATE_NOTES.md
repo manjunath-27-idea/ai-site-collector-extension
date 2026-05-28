@@ -1,5 +1,53 @@
 # AI Site Collector - Update Notes
 
+## Version 3.0.1 (Current) - Authentication & Dynamic Synchronization Polishing
+
+### Major Improvements & Bug Fixes
+
+#### 1. **Multi-Window Settings Syncer**
+- Connected `popup.js` and `options.js` via the `chrome.storage.onChanged` listener. Toggling **Auto-sync to Drive**, **Show Desktop Notifications**, or **Dark Theme Mode** in one window immediately and reactively updates the UI and themes in all other open views.
+- Connected the custom scanner keywords CRUD manager to storage changes. Adding or removing tags instantly syncs on all screens.
+- Connected Google Drive document selection changes to refresh document names immediately on all open windows.
+
+#### 2. **Settings Profile Cards**
+- Replaced the simple static logout button in the popup settings modal with a premium, dynamic settings profile card matching the Options Dashboard footer.
+  - **When Signed Out:** The settings modal hides "Sign Out" entirely and presents an integrated **Sign in with Google** button instead.
+  - **When Signed In:** It displays a circular color-gradient letter avatar badge, the active user email address, and a "Sign Out" link.
+- Added sign-out confirmation alerts (`confirm()`) to both the popup settings and options dashboard to prevent accidental disconnections.
+- Restricted manual Drive sync actions (`driveSyncCard`) in the Options dashboard settings panel so they remain hidden when signed out, displaying a pairing promo card instead.
+
+#### 3. **Options Dashboard Auth Crash Patch**
+- Patched a critical `ReferenceError` inside the options dashboard `authenticate()` function where a missing `authBtn` definition caused the script execution to throw a console error and block users from authenticating. The function now dynamically targets the clicked element safely.
+
+#### 4. **Service Worker Auto-Sync Defaults**
+- Configured default settings (`autoSyncSetting: true`, `notificationsSetting: true`, `darkModeSetting: false`) upon extension install.
+- Fixed `background.js` checking `autoSyncSetting !== false` (meaning true by default) instead of strict `=== true` so that auto-sync works immediately without requiring the user to open and toggle settings.
+
+---
+
+## Version 3.0.0 - Widescreen Options Dashboard, Slider Toggles, Custom Keywords, and MV3 Content Scripts Registration
+
+### New Features
+
+#### 1. **Widescreen Options Dashboard UI**
+- A dedicated, responsive, fullscreen **Options Dashboard** page (`options/index.html`) opened in its own browser tab.
+- Includes a real-time live search filter to query captured websites by title, URL, or description.
+- Interactive category buttons to easily filter grid cards between **All**, **AI Sites**, and **Useful Sites**.
+- Individual site card deletion (`×`) to prune specific sites from local storage dynamically.
+- Integration launcher button inside the popup header to launch `chrome.runtime.openOptionsPage()`.
+
+#### 2. **Visual Toggle Switches**
+- Replaced basic form checkboxes inside settings layouts with premium, tactile glassmorphism slider switches.
+
+#### 3. **Custom Keyword finding Scanner**
+- Fully custom scanners integrated: users add and remove custom keyword tags under settings.
+- The content script (`content.js`) reads custom keyword lists from storage on page load and merges them dynamically to scan and capture preferred platform technologies.
+
+#### 4. **MV3 Script Injection Fix**
+- Added the `"content_scripts"` block to `manifest.json`. Resolves a critical bug where `js/content.js` existed but was never actually registered or injected by Chrome. The script now loads automatically when documents are ready.
+
+---
+
 ## Version 2.0 - Single Document Mode with Features
 
 ### Major Changes

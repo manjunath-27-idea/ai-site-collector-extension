@@ -23,18 +23,13 @@ The extension uses a sophisticated multi-factor analysis to identify AI and usef
 - Medium (50-80%): Some relevant keywords/patterns found
 - Low (<50%): Possible match but uncertain
 
-### 📊 Analytics Dashboard
+### 📊 Widescreen Options Dashboard Website UI
 
-**Statistics Overview:**
-- Total sites collected
-- AI sites count
-- Useful sites count
-- Real-time updates
-
-**Interactive Charts:**
-- **Distribution Chart**: Pie chart showing AI vs Useful sites ratio
-- **Confidence Chart**: Bar chart showing confidence level distribution
-- **Timeline Chart**: Line graph of collection activity over 7 days
+A fullscreen dashboard interface opened via `chrome.runtime.openOptionsPage()` that fits widescreen layouts elegantly:
+- **Responsive Multi-column Grid:** Shows your collected websites in interactive cards.
+- **Real-time Live Search:** Search bar to instantly filter collected sites by title, URL, or description.
+- **Category Filters:** Quick category buttons to filter between All, AI Sites, or Useful Sites.
+- **Individual Card Deletion:** Hovering over any card displays a quick Delete button (`×`) to dynamically remove that specific site from the database.
 
 ### 💾 Google Drive Integration
 
@@ -154,13 +149,9 @@ The extension uses a sophisticated multi-factor analysis to identify AI and usef
 - Handles storage operations
 - Sends notifications
 
-### Data Visualization
+### 🔄 Dynamic Window Synchronization
 
-**Chart.js Integration:**
-- Real-time chart updates
-- Responsive chart sizing
-- Custom color schemes
-- Interactive legends
+- **Fully Reactive Local Storage:** Multi-page synchronization using `chrome.storage.onChanged` ensures that any toggle change, custom keyword modification, account login/logout, or document selection in one window instantly reflects in all other open extension views (such as the popup and options dashboard).
 
 ## Performance Features
 
@@ -191,10 +182,10 @@ The extension uses a sophisticated multi-factor analysis to identify AI and usef
 ### Future Enhancement Possibilities
 
 - [ ] Export to multiple formats (JSON, Excel, PDF)
-- [ ] Custom keyword management UI
+- [x] Custom keyword management UI
 - [ ] Site categorization and tagging system
-- [ ] Advanced search and filtering
-- [ ] Bulk operations (batch export, delete)
+- [x] Advanced search and filtering
+- [x] Bulk operations (batch export, delete)
 - [ ] Integration with other cloud services
 - [ ] Browser sync across devices
 - [ ] Scheduled auto-sync

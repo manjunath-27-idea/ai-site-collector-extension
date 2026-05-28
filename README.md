@@ -9,11 +9,13 @@ A premium-styled Chrome extension that automatically detects and saves AI and us
 - Analyzes page content, metadata, and domain patterns
 - Provides confidence scores for each detection
 
-📊 **Rich Analytics Dashboard**
-- View collected sites with descriptions and metadata
-- Interactive charts showing distribution and confidence levels
-- Timeline visualization of collection activity
-- Filter sites by type (AI or Useful)
+📊 **Widescreen Options Dashboard**
+- Fullscreen dashboard interface running inside a dedicated tab
+- Responsive multi-column layout showing collected sites with descriptions, metadata, and tags
+- Live real-time search that instantly filters titles, URLs, and descriptions
+- Category filters to show All, AI Sites, or Useful Sites
+- Dynamic individual site card deletion (`×`) to prune your collection
+- Custom keywords tags list manager (CRUD) to customize background scanners
 
 💾 **Google Drive Integration**
 - Seamlessly sync all collected sites to Google Drive as CSV files
@@ -75,25 +77,15 @@ A premium-styled Chrome extension that automatically detects and saves AI and us
 - The extension automatically detects AI and useful websites
 - Detected sites appear in the popup window
 
-### View Collected Sites
-1. Click the extension icon
-2. Go to the "Sites" tab
-3. Browse all collected websites with descriptions
-4. Filter by "AI Sites" or "Useful Sites"
-5. Click any site to open it in a new tab
+### View & Manage Collected Sites
+- **Extension Popup:** Click the extension icon in your toolbar to see a scrollable checklist of recently captured sites, filter categories, select document, clear history, or manually trigger syncs.
+- **Widescreen Dashboard:** Click the grid dashboard icon in the popup header to open the fullscreen Options Dashboard. Here you can run live searches, delete individual cards, and fully manage custom keywords.
 
-### Sync to Google Drive
-1. Click the "Sync to Drive" button
-2. A CSV file will be created/updated in your Google Drive
-3. View sync status in the footer
-
-### Analytics
-1. Click the "Stats" tab
-2. View:
-   - Total sites collected
-   - Distribution of AI vs Useful sites
-   - Confidence level breakdown
-   - Collection timeline over the last 7 days
+### Custom Keywords Scanner
+1. Open the Options Dashboard or the Settings Modal.
+2. Under **Custom Site Finding Keywords**, type in your preferred platform name or technology tags (e.g. `openai`, `react`, `canvas`).
+3. Select a category ("AI Related" or "Useful Tool/Resource") and click "Add".
+4. The background scanner will immediately detect and capture any webpages matching your custom keyword tags as you browse the web!
 
 ### Settings
 1. Click the settings icon (⋮)
@@ -116,10 +108,14 @@ ai-site-collector-ext/
 ├── js/
 │   ├── content.js         # Content script (runs on all pages)
 │   └── background.js      # Service worker (handles storage & Drive API)
-└── popup/
-    ├── index.html         # Popup UI
-    ├── styles.css         # Premium styling
-    └── popup.js           # Popup interactions
+├── popup/
+│   ├── index.html         # Popup UI (scrollable collection & settings modal)
+│   ├── styles.css         # Premium slider toggles, keyword tag styling
+│   └── popup.js           # Popup interactions & dynamic synchronizer
+└── options/
+    ├── index.html         # Widescreen Options Dashboard
+    ├── styles.css         # Premium grid, responsive layout, sidebar card
+    └── options.js         # Dashboard CRUD, search, document selector
 ```
 
 ## How It Works
@@ -182,11 +178,10 @@ The extension uses a multi-factor analysis:
 ## Development
 
 ### Technologies Used
-- **Manifest V3**: Latest Chrome extension standard
+- **Vanilla JavaScript**: Fully offline execution
 - **Chrome Storage API**: Local data persistence
 - **Google Drive API**: Cloud synchronization
-- **Chart.js**: Data visualization
-- **Vanilla JavaScript**: No external dependencies
+- **CSS3 Slider Toggles**: Premium glassmorphic interface
 
 ### Customization
 - Edit `js/content.js` to modify detection keywords
@@ -194,11 +189,11 @@ The extension uses a multi-factor analysis:
 - Update `manifest.json` to add new permissions
 
 ## Future Enhancements
-- [ ] Export to other formats (JSON, Excel)
-- [ ] Custom keyword management
+- [ ] Export to other formats (JSON, Excel, PDF)
+- [x] Custom keyword management UI
 - [ ] Site categorization and tagging
-- [ ] Search and filtering
-- [ ] Bulk operations
+- [x] Search and filtering
+- [x] Bulk operations (batch delete)
 - [ ] Integration with other cloud services
 
 ## Support
