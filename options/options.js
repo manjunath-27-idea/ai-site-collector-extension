@@ -63,8 +63,9 @@ const docList = document.getElementById('docList');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    loadSites();
     setupEventListeners();
+    switchPanel('sites');
+    loadSites();
     checkAuthStatus();
     loadSelectedDocument();
     loadSettings();
