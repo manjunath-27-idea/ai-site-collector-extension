@@ -14,7 +14,13 @@ chrome.runtime.onInstalled.addListener(() => {
     lastSync: null,
     autoSyncSetting: true,
     notificationsSetting: true,
-    darkModeSetting: false
+    darkModeSetting: false,
+    remoteAiDomains: ['openai.com', 'chatgpt.com', 'claude.ai', 'anthropic.com', 'huggingface.co', 'midjourney.com', 'replicate.com', 'perplexity.ai', 'gemini.google.com', 'cohere.com', 'stability.ai', 'deepseek.com', 'sora.com'],
+    remoteUsefulDomains: ['github.com', 'stackoverflow.com', 'npmjs.com', 'figma.com', 'canva.com', 'notion.so', 'trello.com', 'react.dev', 'mdn.mozilla.org', 'w3schools.com', 'stackblitz.com', 'codepen.io'],
+    remoteAuthGateways: ['accounts.google.com', 'login.microsoftonline.com', 'okta.com', 'auth0.com', 'clerk.com', 'cognito', 'keycloak']
+  }, () => {
+    // Attempt an initial dynamic sync immediately on installation
+    syncDomainRules();
   });
 });
 
@@ -345,3 +351,48 @@ function generateCSV(sites) {
 
   return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
 }
+
+/**
+ * Synchronize domain classification rules dynamically from GitHub
+ * SECURITY MEASURE: Inputs are strictly sanitized and type-validated to prevent prototype pollution or XSS vectors.
+ */
+function syncDomainRules() {
+  fetch('https://raw.githubusercontent.com/manjunath-27-idea/ai-site-collector-extension/main/domain_rules.json')
+  .then(response => {
+    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+    return response.json();
+  })
+  .then(data => {
+    const cleanData = {};
+    
+    // Strict schema validation checks to safeguard the extension sandbox
+    if (data.known_ai_domains && Array.isArray(data.known_ai_domains)) {
+      cleanData.remoteAiDomains = data.known_ai_domains.filter(
+        d => typeof d === 'string' && d.length < 100 && !d.includes('<') && !d.includes('>')
+      );
+    }
+    if (data.known_useful_domains && Array.isArray(data.known_useful_domains)) {
+      cleanData.remoteUsefulDomains = data.known_useful_domains.filter(
+        d => typeof d === 'string' && d.length < 100 && !d.includes('<') && !d.includes('>')
+      );
+    }
+    if (data.auth_gateways && Array.isArray(data.auth_gateways)) {
+      cleanData.remoteAuthGateways = data.auth_gateways.filter(
+        d => typeof d === 'string' && d.length < 100 && !d.includes('<') && !d.includes('>')
+      );
+    }
+
+    if (Object.keys(cleanData).length > 0) {
+      chrome.storage.local.set(cleanData, () => {
+        console.log('[Domain Sync] Classification catalog synced successfully from GitHub.');
+      });
+    }
+  })
+  .catch(err => {
+    console.log('[Domain Sync] Sync failed (offline fallback active):', err.message);
+  });
+}
+
+// Synchronize classification catalogs dynamically when the browser starts up
+chrome.runtime.onStartup.addListener(syncDomainRules);
+

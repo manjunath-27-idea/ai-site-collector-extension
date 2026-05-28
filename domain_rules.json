@@ -1,0 +1,43 @@
+{
+  "known_ai_domains": [
+    "openai.com",
+    "chatgpt.com",
+    "claude.ai",
+    "anthropic.com",
+    "huggingface.co",
+    "midjourney.com",
+    "replicate.com",
+    "perplexity.ai",
+    "gemini.google.com",
+    "cohere.com",
+    "stability.ai",
+    "deepseek.com",
+    "sora.com"
+  ],
+  "known_useful_domains": [
+    "github.com",
+    "stackoverflow.com",
+    "npmjs.com",
+    "figma.com",
+    "canva.com",
+    "notion.so",
+    "trello.com",
+    "react.dev",
+    "mdn.mozilla.org",
+    "w3schools.com",
+    "stackblitz.com",
+    "codepen.io"
+  ],
+  "auth_gateways": [
+    "accounts.google.com",
+    "login.microsoftonline.com",
+    "auth.auth0.com",
+    "okta.com",
+    "clerk.com",
+    "cognito",
+    "keycloak",
+    "github.com/login",
+    "github.com/join",
+    "chatgpt.com/auth"
+  ]
+}
