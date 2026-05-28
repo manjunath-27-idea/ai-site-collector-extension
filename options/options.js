@@ -163,9 +163,9 @@ function setupEventListeners() {
     sidebarSyncBtn.addEventListener('click', syncToDrive);
     syncBtn.addEventListener('click', syncToDrive);
     clearBtn.addEventListener('click', clearAllSites);
-    selectDocBtn.addEventListener('click', openDocSelector);
-    closeDocModalBtn.addEventListener('click', () => docSelectorModal.classList.remove('active'));
-    docSearch.addEventListener('input', filterDocuments);
+    if (selectDocBtn) selectDocBtn.addEventListener('click', openDocSelector);
+    if (closeDocModalBtn) closeDocModalBtn.addEventListener('click', () => docSelectorModal.classList.remove('active'));
+    if (docSearch) docSearch.addEventListener('input', filterDocuments);
 
     // Sidebar menu clicks
     menuButtons.forEach(btn => {

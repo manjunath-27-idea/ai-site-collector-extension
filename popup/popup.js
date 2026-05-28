@@ -65,11 +65,11 @@ function setupEventListeners() {
     dashboardBtn.addEventListener('click', () => {
         chrome.runtime.openOptionsPage();
     });
-    selectDocBtn.addEventListener('click', openDocSelector);
+    if (selectDocBtn) selectDocBtn.addEventListener('click', openDocSelector);
     popupLogoutBtn.addEventListener('click', logout);
     popupSyncBtn.addEventListener('click', syncToDrive);
     popupSignInBtn.addEventListener('click', authenticate);
-    docSearch.addEventListener('input', filterDocuments);
+    if (docSearch) docSearch.addEventListener('input', filterDocuments);
 
     // Settings toggles listeners
     autoSyncCheckbox.addEventListener('change', (e) => {

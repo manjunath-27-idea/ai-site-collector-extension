@@ -64,20 +64,13 @@
                 </div>
 
                 <div class="sites-section" id="sitesSection" style="display: none;">
-                    <!-- Document Selector -->
+                    <!-- Document Selector (Auto-managed) -->
                     <div class="document-selector">
                         <div class="selector-header">
-                            <h3>Google Drive Document</h3>
-                            <button id="selectDocBtn" class="btn btn-secondary btn-sm">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <path d="M9 12l2 2 4-4"></path>
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                </svg>
-                                Select Document
-                            </button>
+                            <h3>Active Sync Database</h3>
                         </div>
                         <div id="selectedDoc" class="selected-doc">
-                            <p id="docNameDisplay">No document selected</p>
+                            <p id="docNameDisplay">AI_Site_Collector_Database.txt</p>
                         </div>
                     </div>
 
@@ -225,23 +218,7 @@
         </div>
     </div>
 
-    <!-- Document Selector Modal -->
-    <div id="docSelectorModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Select Google Drive Document</h2>
-                <button class="close-btn">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="doc-search">
-                    <input type="text" id="docSearch" placeholder="Search documents..." class="search-input">
-                </div>
-                <div id="docList" class="doc-list">
-                    <p class="loading">Loading documents...</p>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
     <script src="popup.js"></script>
 </body>

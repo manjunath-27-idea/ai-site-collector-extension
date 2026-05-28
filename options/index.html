@@ -171,11 +171,10 @@
                             
                             <div class="settings-doc-selector">
                                 <div class="doc-selector-header">
-                                    <h4>Selected Google Document:</h4>
-                                    <button id="selectDocBtn" class="btn btn-secondary btn-sm">Select Document</button>
+                                    <h4>Active Sync Database File:</h4>
                                 </div>
                                 <div class="doc-display-box">
-                                    <span id="docNameDisplay">No document selected</span>
+                                    <span id="docNameDisplay">AI_Site_Collector_Database.txt</span>
                                 </div>
                             </div>
 
@@ -258,23 +257,7 @@
         </main>
     </div>
 
-    <!-- Document Selector Modal -->
-    <div id="docSelectorModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Select Google Drive Document</h2>
-                <button class="close-btn" id="closeDocModalBtn">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="doc-search">
-                    <input type="text" id="docSearch" placeholder="Search documents in your Google Drive..." class="search-input">
-                </div>
-                <div id="docList" class="doc-list">
-                    <p class="loading">Loading documents...</p>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
     <script src="options.js"></script>
 </body>
