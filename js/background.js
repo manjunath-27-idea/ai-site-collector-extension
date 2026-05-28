@@ -11,7 +11,10 @@ chrome.runtime.onInstalled.addListener(() => {
     driveDocId: null,
     driveDocName: null,
     isAuthenticated: false,
-    lastSync: null
+    lastSync: null,
+    autoSyncSetting: true,
+    notificationsSetting: true,
+    darkModeSetting: false
   });
 });
 
@@ -85,7 +88,7 @@ function saveSiteData(siteData, tabId) {
         }
         
         // Auto-sync if enabled
-        if (result.autoSyncSetting === true) {
+        if (result.autoSyncSetting !== false) {
           syncToDrive(() => {});
         }
       });
