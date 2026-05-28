@@ -4,23 +4,25 @@ A premium-styled Chrome extension that automatically detects and saves AI and us
 
 ## Features
 
-✨ **Automatic Detection**
-- Intelligently identifies AI platforms and useful websites while you browse
-- Analyzes page content, metadata, and domain patterns
-- Provides confidence scores for each detection
+✨ **Automatic Detection & Priority AI Classifier**
+- **AI Classification Priority:** Core scanner gives absolute priority to AI platforms (checks known domains, then checks for direct mentions of `"AI"` or `"Artificial Intelligence"`).
+- **Fallback Keyword Scan:** Checks secondary AI keywords (such as `gpt`, `llm`, `chatbot`, `generative`, etc.) only if the primary broad signature does not exist.
+- **Strict Authentication Exclusions:** Standard login/sign-in pages and dynamically rendered AI auth landing pages (e.g. `https://chatgpt.com/auth/login`) are completely excluded from capturing.
+- **Privacy-First Truncation:** Subpages and chat session URLs of AI websites are cleaned to keep *only* their main domain origin (e.g., `https://chatgpt.com/`). Saved titles are cleaned to *only* hold the base platform name (e.g., `ChatGPT`).
 
 📊 **Widescreen Options Dashboard**
-- Fullscreen dashboard interface running inside a dedicated tab
-- Responsive multi-column layout showing collected sites with descriptions, metadata, and tags
-- Live real-time search that instantly filters titles, URLs, and descriptions
-- Category filters to show All, AI Sites, or Useful Sites
-- Dynamic individual site card deletion (`×`) to prune your collection
-- Custom keywords tags list manager (CRUD) to customize background scanners
+- Fullscreen dashboard interface running inside a dedicated tab.
+- Responsive multi-column layout showing collected sites with descriptions, metadata, and tags.
+- Live real-time search that instantly filters titles, URLs, and descriptions.
+- Category filters to show All, AI Sites, or Useful Sites.
+- Dynamic individual site card deletion (`×`) to prune your collection.
+- Custom keywords tags list manager (CRUD) to customize background scanners.
 
-💾 **Google Drive Integration**
-- Seamlessly sync all collected sites to Google Drive as CSV files
-- One-click authentication with Google OAuth
-- Automatic file management and updates
+💾 **Hands-Free Google Drive Sync**
+- **Automated Discovery & Reconnection:** Automatically searches your Drive for `AI_Site_Collector_Database.txt` or creates a new one with secure headers if missing.
+- **Strict Security Filename Sandbox:** Validates file names at listing, selection, and sync boundaries. Refuses to accept, list, or write to any file other than the exact filename `AI_Site_Collector_Database.txt` to block traversal attacks.
+- **Historical Data Integrity:** All synced data is appended to this single file, leaving previous collection records constant, unchanged, and intact.
+- **One-click authentication** with Google OAuth.
 
 🎨 **Premium UI Design**
 - Dark mode interface with gradient accents
@@ -129,15 +131,15 @@ The extension uses a multi-factor analysis:
 4. **Duplicate Prevention**: Avoids saving the same site twice
 
 ### Data Storage
-- **Local Storage**: Sites are cached locally in Chrome storage
-- **Google Drive**: Synced data is stored as CSV files for easy access
-- **Privacy**: No data is sent to third-party servers
+- **Local Storage**: Sites are cached locally in Chrome storage.
+- **Google Drive**: Synced data is stored securely as a structured text database file for easy read-append operations.
+- **Privacy**: No data is sent to third-party servers.
 
 ### Google Drive Integration
-- Uses OAuth 2.0 for secure authentication
-- Creates files in your Drive root directory
-- Files are named: `AI Sites Collection - [DATE].csv`
-- Automatically updates existing files on sync
+- Uses OAuth 2.0 for secure authentication.
+- Automatically searches, reconnects, or creates the targeted database file in your Drive root directory.
+- The file is strictly locked down to the exact name: `AI_Site_Collector_Database.txt`.
+- Automatically appends new records incrementally, keeping historical data completely constant.
 
 ## Detected AI Keywords
 - AI, Artificial Intelligence, Machine Learning, Deep Learning

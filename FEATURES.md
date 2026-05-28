@@ -33,19 +33,19 @@ A fullscreen dashboard interface opened via `chrome.runtime.openOptionsPage()` t
 
 ### 💾 Google Drive Integration
 
-**Seamless Synchronization:**
-- One-click sync to Google Drive
-- Automatic file naming with timestamps
-- CSV format for easy import to Excel/Sheets
-- Incremental updates (no duplicate files)
+**Hands-Free Cloud Sync:**
+- One-click sync and fully automated cloud connection.
+- Auto-discovers and reconnects to `AI_Site_Collector_Database.txt` or auto-creates it on first sync.
+- Strict security boundary validation that refuses to write or list any file other than `AI_Site_Collector_Database.txt`.
+- Structured text append format for persistent historical collection (no database loss).
 
-**CSV Export Format:**
-- Title: Website name
-- URL: Full website address
-- Description: Extracted page description
-- Type: AI or Useful classification
-- Confidence: Confidence percentage
-- Saved At: Collection timestamp
+**Database Schema Format:**
+- Title: Clean base platform name (for AI sites) or full title.
+- URL: Root domain homepage origin (for AI sites) or full subpage link.
+- Description: Structured classification or page summary.
+- Type: AI or Useful classification.
+- Confidence: Metric value.
+- Saved At: Timestamp.
 
 ### 🎨 Premium UI Design
 
@@ -165,7 +165,7 @@ A fullscreen dashboard interface opened via `chrome.runtime.openOptionsPage()` t
 
 **Storage Management:**
 - Local storage optimization
-- Efficient CSV generation
+- Efficient database text generation
 - Incremental Drive updates
 - Automatic file management
 
@@ -211,7 +211,7 @@ A fullscreen dashboard interface opened via `chrome.runtime.openOptionsPage()` t
 - **Detection Time**: 2-3 seconds per page
 - **Storage**: ~1KB per site (local)
 - **Sync Time**: 2-5 seconds (depends on site count)
-- **Drive File Size**: ~5KB per 100 sites (CSV)
+- **Drive File Size**: ~5KB per 100 sites (TXT)
 
 ## Support & Documentation
 
