@@ -364,21 +364,37 @@ function syncDomainRules() {
   })
   .then(data => {
     const cleanData = {};
+    const safePatternRegex = /^[a-z0-9\-\.\_\/]+$/i;
     
     // Strict schema validation checks to safeguard the extension sandbox
     if (data.known_ai_domains && Array.isArray(data.known_ai_domains)) {
       cleanData.remoteAiDomains = data.known_ai_domains.filter(
-        d => typeof d === 'string' && d.length < 100 && !d.includes('<') && !d.includes('>')
+        d => typeof d === 'string' && 
+             d.length < 100 && 
+             safePatternRegex.test(d) && 
+             !d.includes('__proto__') && 
+             !d.includes('constructor') && 
+             !d.includes('prototype')
       );
     }
     if (data.known_useful_domains && Array.isArray(data.known_useful_domains)) {
       cleanData.remoteUsefulDomains = data.known_useful_domains.filter(
-        d => typeof d === 'string' && d.length < 100 && !d.includes('<') && !d.includes('>')
+        d => typeof d === 'string' && 
+             d.length < 100 && 
+             safePatternRegex.test(d) && 
+             !d.includes('__proto__') && 
+             !d.includes('constructor') && 
+             !d.includes('prototype')
       );
     }
     if (data.auth_gateways && Array.isArray(data.auth_gateways)) {
       cleanData.remoteAuthGateways = data.auth_gateways.filter(
-        d => typeof d === 'string' && d.length < 100 && !d.includes('<') && !d.includes('>')
+        d => typeof d === 'string' && 
+             d.length < 100 && 
+             safePatternRegex.test(d) && 
+             !d.includes('__proto__') && 
+             !d.includes('constructor') && 
+             !d.includes('prototype')
       );
     }
 

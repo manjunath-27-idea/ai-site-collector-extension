@@ -87,7 +87,8 @@ function isAuthenticationOrSystemPage(metadata, remoteAuthList) {
   const authPathKeywords = [
     '/login', '/signin', '/signup', '/register', '/auth', 
     '/oauth', '/authorize', '/logout', '/signout', '/password',
-    '/reset', '/mfa', '/2fa', 'signin', 'signup', 'login'
+    '/reset', '/mfa', '/2fa', 'signin', 'signup', 'login',
+    '/session', '/join', 'sign-in', 'sign-up', 'log-in'
   ];
 
   try {
@@ -120,14 +121,22 @@ function isAuthenticationOrSystemPage(metadata, remoteAuthList) {
   const authTitleKeywords = [
     'log in', 'sign in', 'sign up', 'create account', 'register account',
     'forgot password', 'reset password', 'two-factor', '2fa', 'verification',
-    'authentication required', 'sign into'
+    'authentication required', 'sign into', 'welcome back', 'log in or sign up',
+    'get started for free', 'join now'
   ];
   if (authTitleKeywords.some(kw => title.includes(kw) || description.includes(kw))) {
     return true;
   }
 
-  // 3. Dynamic DOM inspection for credentials fields
+  // 3. Dynamic DOM inspection for credentials fields & active login elements
   if (document.querySelector('input[type="password"]') || document.querySelector('input[autocomplete*="password"]')) {
+    return true;
+  }
+
+  // Heuristic: If we are on a known AI domain but the title contains log in/sign up prompts, block it
+  const domain = new URL(metadata.url).hostname.toLowerCase();
+  const isAiDomain = AI_DOMAINS.some(d => domain.includes(d.toLowerCase()));
+  if (isAiDomain && (title.includes('log in') || title.includes('sign up') || title.includes('sign in'))) {
     return true;
   }
 
@@ -143,6 +152,44 @@ function cleanToMainDomain(urlStr) {
     return urlObj.origin + '/';
   } catch (e) {
     return urlStr;
+  }
+}
+
+/**
+ * Extract the beautiful capitalized main name of the AI platform (e.g. chatgpt.com -> ChatGPT)
+ */
+function getMainSiteName(urlStr) {
+  try {
+    const urlObj = new URL(urlStr);
+    let hostname = urlObj.hostname.replace('www.', '').toLowerCase();
+    
+    if (hostname.includes('gemini.google.com') || hostname.includes('gemini')) {
+      return 'Gemini';
+    }
+    if (hostname.includes('chatgpt')) {
+      return 'ChatGPT';
+    }
+    if (hostname.includes('claude')) {
+      return 'Claude';
+    }
+    if (hostname.includes('perplexity')) {
+      return 'Perplexity';
+    }
+    if (hostname.includes('copilot')) {
+      return 'Copilot';
+    }
+    if (hostname.includes('huggingface')) {
+      return 'HuggingFace';
+    }
+    if (hostname.includes('midjourney')) {
+      return 'Midjourney';
+    }
+    
+    // Fallback: take the first part of domain and capitalize it
+    const base = hostname.split('.')[0];
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  } catch (e) {
+    return 'AI Platform';
   }
 }
 
@@ -170,12 +217,28 @@ function classifyWebsite(metadata, aiKeywordsList, usefulKeywordsList, remoteAiL
     classification.reasons.push('Known AI platform domain');
   }
 
-  // Check for AI keywords
-  const aiMatches = aiKeywordsList.filter(keyword => text.includes(keyword.toLowerCase())).length;
-  if (aiMatches >= 2 || (aiMatches >= 1 && classification.isAI)) {
+  // User Heuristic Check: Check "AI" (whole-word) or "Artificial Intelligence" first
+  const hasPrimaryAiKeywords = (/\bai\b/i.test(text)) || 
+                               text.includes('artificial intelligence') || 
+                               text.includes('artificial intellegence');
+
+  if (hasPrimaryAiKeywords) {
     classification.isAI = true;
-    classification.confidence = Math.min(0.95, Math.max(classification.confidence, 0.5 + (aiMatches * 0.1)));
-    classification.reasons.push(`${aiMatches} AI keywords matched`);
+    classification.confidence = Math.max(classification.confidence, 0.90);
+    classification.reasons.push('Direct AI platform signature matched');
+  } else {
+    // If primary term is not found, fall back to checking other specific AI keywords
+    const otherAiKeywords = aiKeywordsList.filter(kw => 
+      kw.toLowerCase() !== 'ai' && 
+      kw.toLowerCase() !== 'artificial intelligence'
+    );
+    const aiMatches = otherAiKeywords.filter(keyword => text.includes(keyword.toLowerCase())).length;
+    
+    if (aiMatches >= 2 || (aiMatches >= 1 && classification.isAI)) {
+      classification.isAI = true;
+      classification.confidence = Math.min(0.95, Math.max(classification.confidence, 0.5 + (aiMatches * 0.1)));
+      classification.reasons.push(`${aiMatches} specific AI keywords matched`);
+    }
   }
 
   // If the site is determined to be AI, stop here and prioritize it!
@@ -240,14 +303,8 @@ function sendPageData() {
       // clean the deep conversation paths to keep only the main homepage/domain origin.
       if (classification.isAI) {
         metadata.url = cleanToMainDomain(metadata.url);
-        
-        // Clean deep titles (like specific private prompts) to represent the main platform title nicely
-        try {
-          const urlObj = new URL(metadata.url);
-          const domainName = urlObj.hostname.replace('www.', '');
-          const cleanName = domainName.charAt(0).toUpperCase() + domainName.slice(1).split('.')[0];
-          metadata.title = `${cleanName} - AI Service`;
-        } catch(e) {}
+        metadata.title = getMainSiteName(metadata.url);
+        metadata.description = `AI Platform homepage or base service portal.`;
       }
 
       chrome.runtime.sendMessage({
