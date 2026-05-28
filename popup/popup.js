@@ -5,7 +5,6 @@
 
 let sites = [];
 let currentFilter = 'all';
-let charts = {};
 let allDriveFiles = [];
 
 // DOM Elements
@@ -17,6 +16,7 @@ const authBtn = document.getElementById('authBtn');
 const syncBtn = document.getElementById('syncBtn');
 const clearBtn = document.getElementById('clearBtn');
 const settingsBtn = document.getElementById('settingsBtn');
+const dashboardBtn = document.getElementById('dashboardBtn');
 const settingsModal = document.getElementById('settingsModal');
 const docSelectorModal = document.getElementById('docSelectorModal');
 const selectDocBtn = document.getElementById('selectDocBtn');
@@ -27,7 +27,16 @@ const closeButtons = document.querySelectorAll('.close-btn');
 const logoutBtn = document.getElementById('logoutBtn');
 const syncStatus = document.getElementById('syncStatus');
 const filterBtns = document.querySelectorAll('.filter-btn');
-const tabBtns = document.querySelectorAll('.tab-btn');
+
+// Settings and custom keyword DOM elements
+const autoSyncCheckbox = document.getElementById('autoSync');
+const notificationsCheckbox = document.getElementById('notifications');
+const darkModeCheckbox = document.getElementById('darkMode');
+const newKeywordInput = document.getElementById('newKeyword');
+const keywordTypeSelect = document.getElementById('keywordType');
+const addKeywordBtn = document.getElementById('addKeywordBtn');
+const aiKeywordsTags = document.getElementById('aiKeywordsTags');
+const usefulKeywordsTags = document.getElementById('usefulKeywordsTags');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -35,6 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     checkAuthStatus();
     loadSelectedDocument();
+    loadSettings();
+    loadCustomKeywords();
 });
 
 /**
@@ -45,9 +56,35 @@ function setupEventListeners() {
     syncBtn.addEventListener('click', syncToDrive);
     clearBtn.addEventListener('click', clearAllSites);
     settingsBtn.addEventListener('click', openSettings);
+    dashboardBtn.addEventListener('click', () => {
+        chrome.runtime.openOptionsPage();
+    });
     selectDocBtn.addEventListener('click', openDocSelector);
     logoutBtn.addEventListener('click', logout);
     docSearch.addEventListener('input', filterDocuments);
+
+    // Settings toggles listeners
+    autoSyncCheckbox.addEventListener('change', (e) => {
+        chrome.storage.local.set({ autoSyncSetting: e.target.checked });
+    });
+
+    notificationsCheckbox.addEventListener('change', (e) => {
+        chrome.storage.local.set({ notificationsSetting: e.target.checked });
+    });
+
+    darkModeCheckbox.addEventListener('change', (e) => {
+        const isDark = e.target.checked;
+        chrome.storage.local.set({ darkModeSetting: isDark });
+        applyDarkMode(isDark);
+    });
+
+    // Custom keyword listener
+    addKeywordBtn.addEventListener('click', addCustomKeyword);
+    newKeywordInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            addCustomKeyword();
+        }
+    });
 
     closeButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -67,13 +104,6 @@ function setupEventListeners() {
         });
     });
 
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const tabName = e.currentTarget.dataset.tab;
-            switchTab(tabName);
-        });
-    });
-
     // Close modal when clicking outside
     [settingsModal, docSelectorModal].forEach(modal => {
         modal.addEventListener('click', (e) => {
@@ -82,26 +112,6 @@ function setupEventListeners() {
             }
         });
     });
-}
-
-/**
- * Switch tabs
- */
-function switchTab(tabName) {
-    // Update tab buttons
-    tabBtns.forEach(btn => btn.classList.remove('active'));
-    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-
-    // Update tab content
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    document.getElementById(`${tabName}-tab`).classList.add('active');
-
-    // Initialize charts if switching to stats tab
-    if (tabName === 'stats') {
-        setTimeout(initializeCharts, 100);
-    }
 }
 
 /**
@@ -161,14 +171,10 @@ function authenticate() {
     });
 }
 
-/**
- * Load sites from storage
- */
 function loadSites() {
     chrome.runtime.sendMessage({ action: 'getSites' }, (response) => {
         sites = response.sites || [];
         renderSites();
-        updateStats();
     });
 }
 
@@ -348,164 +354,6 @@ function createSiteElement(site) {
 }
 
 /**
- * Update statistics
- */
-function updateStats() {
-    const aiSites = sites.filter(s => s.classification.isAI);
-    const usefulSites = sites.filter(s => s.classification.isUseful && !s.classification.isAI);
-
-    document.getElementById('totalCount').textContent = sites.length;
-    document.getElementById('aiCount').textContent = aiSites.length;
-    document.getElementById('usefulCount').textContent = usefulSites.length;
-}
-
-/**
- * Initialize charts
- */
-function initializeCharts() {
-    const aiSites = sites.filter(s => s.classification.isAI);
-    const usefulSites = sites.filter(s => s.classification.isUseful && !s.classification.isAI);
-
-    // Distribution Chart
-    const distCtx = document.getElementById('distributionChart');
-    if (distCtx) {
-        if (charts.distribution) charts.distribution.destroy();
-        charts.distribution = new Chart(distCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['AI Sites', 'Useful Sites'],
-                datasets: [{
-                    data: [aiSites.length, usefulSites.length],
-                    backgroundColor: ['#6366f1', '#8b5cf6'],
-                    borderColor: '#1e293b',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        labels: {
-                            color: '#cbd5e1',
-                            font: { size: 12 }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    // Confidence Chart
-    const confCtx = document.getElementById('confidenceChart');
-    if (confCtx) {
-        if (charts.confidence) charts.confidence.destroy();
-        const confidenceLevels = {
-            'High (80-100%)': sites.filter(s => s.classification.confidence >= 0.8).length,
-            'Medium (50-80%)': sites.filter(s => s.classification.confidence >= 0.5 && s.classification.confidence < 0.8).length,
-            'Low (<50%)': sites.filter(s => s.classification.confidence < 0.5).length
-        };
-
-        charts.confidence = new Chart(confCtx, {
-            type: 'bar',
-            data: {
-                labels: Object.keys(confidenceLevels),
-                datasets: [{
-                    label: 'Count',
-                    data: Object.values(confidenceLevels),
-                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                indexAxis: 'y',
-                plugins: {
-                    legend: { display: false }
-                },
-                scales: {
-                    x: {
-                        ticks: { color: '#cbd5e1' },
-                        grid: { color: '#334155' }
-                    },
-                    y: {
-                        ticks: { color: '#cbd5e1' }
-                    }
-                }
-            }
-        });
-    }
-
-    // Timeline Chart
-    const timeCtx = document.getElementById('timelineChart');
-    if (timeCtx) {
-        if (charts.timeline) charts.timeline.destroy();
-        const timelineData = getTimelineData();
-
-        charts.timeline = new Chart(timeCtx, {
-            type: 'line',
-            data: {
-                labels: timelineData.labels,
-                datasets: [{
-                    label: 'Sites Collected',
-                    data: timelineData.data,
-                    borderColor: '#6366f1',
-                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: {
-                        labels: { color: '#cbd5e1' }
-                    }
-                },
-                scales: {
-                    y: {
-                        ticks: { color: '#cbd5e1' },
-                        grid: { color: '#334155' }
-                    },
-                    x: {
-                        ticks: { color: '#cbd5e1' },
-                        grid: { color: '#334155' }
-                    }
-                }
-            }
-        });
-    }
-}
-
-/**
- * Get timeline data
- */
-function getTimelineData() {
-    const last7Days = {};
-    for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const key = date.toLocaleDateString();
-        last7Days[key] = 0;
-    }
-
-    sites.forEach(site => {
-        const date = new Date(site.savedAt).toLocaleDateString();
-        if (date in last7Days) {
-            last7Days[date]++;
-        }
-    });
-
-    return {
-        labels: Object.keys(last7Days),
-        data: Object.values(last7Days)
-    };
-}
-
-/**
  * Sync to Google Drive
  */
 function syncToDrive() {
@@ -530,7 +378,6 @@ function clearAllSites() {
         chrome.storage.local.set({ sites: [] });
         sites = [];
         renderSites();
-        updateStats();
         updateSyncStatus('All sites cleared');
     }
 }
@@ -581,9 +428,111 @@ function escapeHtml(text) {
     return text.replace(/[&<>"']/g, m => map[m]);
 }
 
-// Listen for storage changes
+// Listen for storage changes from background script or options page
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.sites) {
         loadSites();
     }
 });
+
+/**
+ * Load settings from storage
+ */
+function loadSettings() {
+    chrome.storage.local.get(['autoSyncSetting', 'notificationsSetting', 'darkModeSetting'], (result) => {
+        autoSyncCheckbox.checked = result.autoSyncSetting !== false;
+        notificationsCheckbox.checked = result.notificationsSetting !== false;
+        darkModeCheckbox.checked = !!result.darkModeSetting;
+        applyDarkMode(!!result.darkModeSetting);
+    });
+}
+
+/**
+ * Apply dark mode class to body
+ */
+function applyDarkMode(isDark) {
+    if (isDark) {
+        document.body.classList.remove('light-theme');
+    } else {
+        document.body.classList.add('light-theme');
+    }
+}
+
+/**
+ * Load and render custom keywords
+ */
+function loadCustomKeywords() {
+    chrome.storage.local.get(['customAiKeywords', 'customUsefulKeywords'], (result) => {
+        const aiKeywords = result.customAiKeywords || [];
+        const usefulKeywords = result.customUsefulKeywords || [];
+
+        renderKeywordTags(aiKeywords, aiKeywordsTags, 'ai');
+        renderKeywordTags(usefulKeywords, usefulKeywordsTags, 'useful');
+    });
+}
+
+/**
+ * Render keyword tags inside container
+ */
+function renderKeywordTags(keywords, container, type) {
+    if (keywords.length === 0) {
+        container.innerHTML = '<span class="settings-help" style="margin:0;">None</span>';
+        return;
+    }
+
+    container.innerHTML = keywords.map(kw => `
+        <span class="keyword-tag-item ${type === 'useful' ? 'useful-tag' : ''}">
+            ${escapeHtml(kw)}
+            <button class="delete-tag-btn" data-kw="${escapeHtml(kw)}" data-type="${type}">&times;</button>
+        </span>
+    `).join('');
+
+    // Add delete event listeners
+    container.querySelectorAll('.delete-tag-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const kw = e.target.dataset.kw;
+            const t = e.target.dataset.type;
+            deleteCustomKeyword(kw, t);
+        });
+    });
+}
+
+/**
+ * Add custom keyword
+ */
+function addCustomKeyword() {
+    const val = newKeywordInput.value.trim().toLowerCase();
+    const type = keywordTypeSelect.value;
+
+    if (!val) return;
+
+    const storageKey = type === 'ai' ? 'customAiKeywords' : 'customUsefulKeywords';
+
+    chrome.storage.local.get(storageKey, (result) => {
+        const keywords = result[storageKey] || [];
+        if (!keywords.includes(val)) {
+            keywords.push(val);
+            chrome.storage.local.set({ [storageKey]: keywords }, () => {
+                newKeywordInput.value = '';
+                loadCustomKeywords();
+            });
+        } else {
+            alert('Keyword already exists!');
+        }
+    });
+}
+
+/**
+ * Delete custom keyword
+ */
+function deleteCustomKeyword(kw, type) {
+    const storageKey = type === 'ai' ? 'customAiKeywords' : 'customUsefulKeywords';
+
+    chrome.storage.local.get(storageKey, (result) => {
+        let keywords = result[storageKey] || [];
+        keywords = keywords.filter(k => k !== kw);
+        chrome.storage.local.set({ [storageKey]: keywords }, () => {
+            loadCustomKeywords();
+        });
+    });
+}

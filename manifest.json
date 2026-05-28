@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI Site Collector",
-  "version": "1.0.0",
-  "description": "Automatically detect and save AI and useful websites to Google Drive with descriptions",
+  "version": "3.0.0",
+  "description": "Automatically detect and save AI and useful websites to Google Drive with descriptions and features",
   "permissions": [
     "tabs",
     "storage",
@@ -21,13 +21,21 @@
     "default_popup": "popup/index.html",
     "default_title": "AI Site Collector"
   },
+  "options_page": "options/index.html",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["js/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "oauth2": {
-    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "339351879530-uht86isp08mujmil6ob97j4fuqdpfef6.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/drive.file",
       "https://www.googleapis.com/auth/userinfo.email"

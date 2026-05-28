@@ -60,7 +60,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * Save site data to local storage
  */
 function saveSiteData(siteData, tabId) {
-  chrome.storage.local.get('sites', (result) => {
+  chrome.storage.local.get(['sites', 'notificationsSetting', 'autoSyncSetting'], (result) => {
     const sites = result.sites || [];
     
     // Check if site already exists
@@ -73,14 +73,21 @@ function saveSiteData(siteData, tabId) {
         savedAt: new Date().toISOString()
       });
       
-      chrome.storage.local.set({ sites });
-      
-      // Show notification
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon-128.png',
-        title: 'Site Saved!',
-        message: `"${siteData.title}" has been saved.`
+      chrome.storage.local.set({ sites }, () => {
+        // Show notification if enabled
+        if (result.notificationsSetting !== false) {
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icons/icon-128.png',
+            title: 'Site Saved!',
+            message: `"${siteData.title}" has been saved.`
+          });
+        }
+        
+        // Auto-sync if enabled
+        if (result.autoSyncSetting === true) {
+          syncToDrive(() => {});
+        }
       });
     }
   });

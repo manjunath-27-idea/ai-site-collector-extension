@@ -19,6 +19,14 @@
                     AI Site Collector
                 </h1>
                 <div class="header-actions">
+                    <button id="dashboardBtn" class="icon-btn" title="Open Dashboard">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="9"></rect>
+                            <rect x="14" y="3" width="7" height="5"></rect>
+                            <rect x="14" y="12" width="7" height="9"></rect>
+                            <rect x="3" y="16" width="7" height="5"></rect>
+                        </svg>
+                    </button>
                     <button id="settingsBtn" class="icon-btn" title="Settings">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <circle cx="12" cy="12" r="1"></circle>
@@ -29,25 +37,6 @@
                 </div>
             </div>
         </header>
-
-        <!-- Tab Navigation -->
-        <nav class="tabs">
-            <button class="tab-btn active" data-tab="sites">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"></path>
-                    <path d="M7 7h10M7 11h10M7 15h7"></path>
-                </svg>
-                Sites
-            </button>
-            <button class="tab-btn" data-tab="stats">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M3 3v18h18"></path>
-                    <path d="M7 14l4-4 4 4 5-5"></path>
-                    <path d="M18 9h3v3"></path>
-                </svg>
-                Stats
-            </button>
-        </nav>
 
         <!-- Main Content -->
         <main class="content">
@@ -130,39 +119,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Stats Tab -->
-            <div class="tab-content" id="stats-tab">
-                <div class="stats-container">
-                    <div class="stat-card">
-                        <div class="stat-value" id="totalCount">0</div>
-                        <div class="stat-label">Total Sites</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="aiCount">0</div>
-                        <div class="stat-label">AI Sites</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="usefulCount">0</div>
-                        <div class="stat-label">Useful Sites</div>
-                    </div>
-                </div>
-
-                <div class="chart-container">
-                    <h3>Distribution</h3>
-                    <canvas id="distributionChart"></canvas>
-                </div>
-
-                <div class="chart-container">
-                    <h3>Confidence Levels</h3>
-                    <canvas id="confidenceChart"></canvas>
-                </div>
-
-                <div class="chart-container">
-                    <h3>Collection Timeline</h3>
-                    <canvas id="timelineChart"></canvas>
-                </div>
-            </div>
         </main>
 
         <!-- Footer -->
@@ -180,23 +136,60 @@
             </div>
             <div class="modal-body">
                 <div class="setting-group">
-                    <label>
+                    <div class="toggle-label">
+                        <strong>Auto-sync to Drive</strong>
+                    </div>
+                    <label class="toggle-switch">
                         <input type="checkbox" id="autoSync" checked>
-                        Auto-sync to Drive
+                        <span class="slider"></span>
                     </label>
                 </div>
                 <div class="setting-group">
-                    <label>
+                    <div class="toggle-label">
+                        <strong>Show notifications</strong>
+                    </div>
+                    <label class="toggle-switch">
                         <input type="checkbox" id="notifications" checked>
-                        Show notifications
+                        <span class="slider"></span>
                     </label>
                 </div>
                 <div class="setting-group">
-                    <label>
+                    <div class="toggle-label">
+                        <strong>Dark mode</strong>
+                    </div>
+                    <label class="toggle-switch">
                         <input type="checkbox" id="darkMode">
-                        Dark mode
+                        <span class="slider"></span>
                     </label>
                 </div>
+                
+                <hr class="settings-divider">
+                
+                <div class="keywords-management">
+                    <h3>Custom Site Finding Keywords</h3>
+                    <p class="settings-help">Add keywords to detect custom sites as AI or Useful</p>
+                    <div class="keyword-inputs">
+                        <input type="text" id="newKeyword" placeholder="Enter keyword..." class="keyword-input">
+                        <select id="keywordType" class="keyword-select">
+                            <option value="ai">AI Site</option>
+                            <option value="useful">Useful Site</option>
+                        </select>
+                        <button id="addKeywordBtn" class="btn btn-secondary btn-sm">Add</button>
+                    </div>
+                    <div class="keywords-list-container">
+                        <div class="keywords-subheader">Custom AI Keywords:</div>
+                        <div id="aiKeywordsTags" class="keywords-tags">
+                            <!-- Tags injected dynamically -->
+                        </div>
+                        <div class="keywords-subheader">Custom Useful Keywords:</div>
+                        <div id="usefulKeywordsTags" class="keywords-tags">
+                            <!-- Tags injected dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="settings-divider">
+
                 <button id="logoutBtn" class="btn btn-danger">Sign Out</button>
             </div>
         </div>
@@ -220,7 +213,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="popup.js"></script>
 </body>
 </html>

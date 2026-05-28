@@ -77,7 +77,7 @@ function extractPageMetadata() {
 /**
  * Classify if website is AI or useful
  */
-function classifyWebsite(metadata) {
+function classifyWebsite(metadata, aiKeywordsList, usefulKeywordsList) {
   const text = (metadata.title + ' ' + metadata.description + ' ' + metadata.url).toLowerCase();
   const domain = new URL(metadata.url).hostname.toLowerCase();
 
@@ -96,19 +96,19 @@ function classifyWebsite(metadata) {
   }
 
   // Check for AI keywords
-  const aiMatches = AI_KEYWORDS.filter(keyword => text.includes(keyword)).length;
-  if (aiMatches >= 2) {
+  const aiMatches = aiKeywordsList.filter(keyword => text.includes(keyword.toLowerCase())).length;
+  if (aiMatches >= 2 || (aiMatches >= 1 && classification.isAI)) {
     classification.isAI = true;
-    classification.confidence = Math.min(0.9, 0.5 + (aiMatches * 0.1));
-    classification.reasons.push(`${aiMatches} AI-related keywords found`);
+    classification.confidence = Math.min(0.95, Math.max(classification.confidence, 0.5 + (aiMatches * 0.1)));
+    classification.reasons.push(`${aiMatches} AI keywords matched`);
   }
 
   // Check for useful keywords
-  const usefulMatches = USEFUL_KEYWORDS.filter(keyword => text.includes(keyword)).length;
+  const usefulMatches = usefulKeywordsList.filter(keyword => text.includes(keyword.toLowerCase())).length;
   if (usefulMatches >= 2) {
     classification.isUseful = true;
-    classification.confidence = Math.min(0.9, 0.5 + (usefulMatches * 0.1));
-    classification.reasons.push(`${usefulMatches} useful-related keywords found`);
+    classification.confidence = Math.min(0.9, Math.max(classification.confidence, 0.5 + (usefulMatches * 0.1)));
+    classification.reasons.push(`${usefulMatches} useful keywords matched`);
   }
 
   return classification;
@@ -118,23 +118,28 @@ function classifyWebsite(metadata) {
  * Send page data to background script
  */
 function sendPageData() {
-  const metadata = extractPageMetadata();
-  const classification = classifyWebsite(metadata);
+  chrome.storage.local.get(['customAiKeywords', 'customUsefulKeywords'], (result) => {
+    const activeAiKeywords = [...AI_KEYWORDS, ...(result.customAiKeywords || [])];
+    const activeUsefulKeywords = [...USEFUL_KEYWORDS, ...(result.customUsefulKeywords || [])];
 
-  if (classification.isAI || classification.isUseful) {
-    chrome.runtime.sendMessage({
-      action: 'saveSite',
-      data: {
-        ...metadata,
-        classification,
-        timestamp: new Date().toISOString()
-      }
-    }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.log('Extension not ready yet');
-      }
-    });
-  }
+    const metadata = extractPageMetadata();
+    const classification = classifyWebsite(metadata, activeAiKeywords, activeUsefulKeywords);
+
+    if (classification.isAI || classification.isUseful) {
+      chrome.runtime.sendMessage({
+        action: 'saveSite',
+        data: {
+          ...metadata,
+          classification,
+          timestamp: new Date().toISOString()
+        }
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.log('Extension not ready yet');
+        }
+      });
+    }
+  });
 }
 
 // Send data when page loads
