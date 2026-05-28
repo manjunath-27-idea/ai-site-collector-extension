@@ -268,9 +268,18 @@ function renderDocumentList(files) {
                 <div class="doc-name">${escapeHtml(file.name)}</div>
                 <div class="doc-type">${file.mimeType}</div>
             </div>
-            <button class="select-doc-btn" onclick="selectDocument('${file.id}', '${file.name}')">Select</button>
+            <button class="select-doc-btn" data-id="${file.id}" data-name="${escapeHtml(file.name)}">Select</button>
         </div>
     `).join('');
+
+    // Attach programmatic click listeners to prevent MV3 CSP violations
+    docList.querySelectorAll('.select-doc-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const id = e.target.dataset.id;
+            const name = e.target.dataset.name;
+            selectDocument(id, name);
+        });
+    });
 }
 
 /**
