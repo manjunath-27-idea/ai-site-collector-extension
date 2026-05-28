@@ -210,11 +210,14 @@ function classifyWebsite(metadata, aiKeywordsList, usefulKeywordsList, remoteAiL
   // --- PRIORITIZED STRATEGY 1: Check if the site is an AI Platform ---
   const joinedAiDomains = [...AI_DOMAINS, ...(remoteAiList || [])];
   const domainMatch = joinedAiDomains.some(d => domain.includes(d.toLowerCase()));
+  const isAiTld = domain.endsWith('.ai') || 
+                  domain.includes('.ai.') || 
+                  domain.split('.').includes('ai');
   
-  if (domainMatch) {
+  if (domainMatch || isAiTld) {
     classification.isAI = true;
     classification.confidence = 0.95;
-    classification.reasons.push('Known AI platform domain');
+    classification.reasons.push(domainMatch ? 'Known AI platform domain' : 'AI top-level domain (.ai)');
   }
 
   // User Heuristic Check: Check "AI" (whole-word) or "Artificial Intelligence" first
