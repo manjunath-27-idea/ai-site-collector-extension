@@ -76,6 +76,7 @@ function saveSiteData(siteData, tabId) {
     const existingIndex = sites.findIndex(s => s.url === siteData.url);
     
     if (existingIndex === -1) {
+      // New site: add to collection
       sites.push({
         ...siteData,
         id: generateId(),
@@ -98,6 +99,24 @@ function saveSiteData(siteData, tabId) {
           syncToDrive(() => {});
         }
       });
+    } else {
+      // Site already exists: upgrade classification if new data shows it is AI and old data did not
+      const existing = sites[existingIndex];
+      const wasAI = existing.classification && existing.classification.isAI;
+      const nowAI = siteData.classification && siteData.classification.isAI;
+      
+      if (!wasAI && nowAI) {
+        // Upgrade: update classification and title/description with corrected AI metadata
+        sites[existingIndex] = {
+          ...existing,
+          title: siteData.title,
+          description: siteData.description,
+          classification: siteData.classification,
+          updatedAt: new Date().toISOString()
+        };
+        chrome.storage.local.set({ sites });
+      }
+      // If already AI or classification not changed, skip (preserve existing entry as-is)
     }
   });
 }

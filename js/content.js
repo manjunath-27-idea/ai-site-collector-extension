@@ -21,7 +21,8 @@ const USEFUL_KEYWORDS = [
 const AI_DOMAINS = [
   'openai.com', 'anthropic.com', 'huggingface.co', 'midjourney.com',
   'replicate.com', 'runway.com', 'perplexity.ai', 'claude.ai',
-  'chatgpt.com', 'gemini.google.com', 'cohere.com', 'stability.ai'
+  'chatgpt.com', 'gemini.google.com', 'cohere.com', 'stability.ai',
+  'deepseek.com', 'sora.com', 'copilot.microsoft.com', 'bard.google.com'
 ];
 
 /**
@@ -84,59 +85,70 @@ function isAuthenticationOrSystemPage(metadata, remoteAuthList) {
   const description = (metadata.description || '').toLowerCase();
   
   // 1. Static and Remote Authentication Path/Query Exclusions
-  const authPathKeywords = [
-    '/login', '/signin', '/signup', '/register', '/auth', 
-    '/oauth', '/authorize', '/logout', '/signout', '/password',
-    '/reset', '/mfa', '/2fa', 'signin', 'signup', 'login',
-    '/session', '/join', 'sign-in', 'sign-up', 'log-in'
+  // NOTE: Only match full path segments - avoid short fragments that could be part of real URLs
+  const authPathSegments = [
+    '/login', '/signin', '/signup', '/register',
+    '/oauth', '/authorize', '/logout', '/signout',
+    '/reset-password', '/forgot-password', '/mfa', '/2fa',
+    '/sign-in', '/sign-up', '/log-in', '/log-out', '/session/new', '/join'
   ];
 
   try {
     const urlObj = new URL(metadata.url);
-    const pathAndQuery = urlObj.pathname + urlObj.search;
+    const pathLower = urlObj.pathname.toLowerCase();
+    const queryLower = urlObj.search.toLowerCase();
     
-    // Check path for login keywords
-    if (authPathKeywords.some(kw => pathAndQuery.includes(kw))) {
+    // Check path for login segments (match as exact path segments or at start)
+    if (authPathSegments.some(seg => pathLower === seg || pathLower.startsWith(seg + '/') || pathLower.startsWith(seg + '?'))) {
       return true;
     }
     
-    // Check subdomain (e.g. auth.domain.com, accounts.domain.com)
+    // Check query string for auth-related keys (only in query, not path)
+    if (queryLower.includes('action=login') || queryLower.includes('mode=signin') || queryLower.includes('redirect_to=/login')) {
+      return true;
+    }
+    
+    // Check subdomain (e.g. auth.domain.com, accounts.domain.com, login.domain.com)
     const hostname = urlObj.hostname.toLowerCase();
     if (hostname.startsWith('auth.') || hostname.startsWith('login.') || hostname.startsWith('accounts.')) {
       return true;
     }
     
-    // Check against synced remote gateways
+    // Check against synced remote gateways (exact domain/path match)
     if (remoteAuthList && Array.isArray(remoteAuthList)) {
-      if (remoteAuthList.some(gate => hostname.includes(gate.toLowerCase()) || pathAndQuery.includes(gate.toLowerCase()))) {
+      if (remoteAuthList.some(gate => {
+        const g = gate.toLowerCase();
+        // Only match if the full gate string appears as a hostname or path segment
+        return hostname === g || hostname.endsWith('.' + g) || pathLower.startsWith('/' + g);
+      })) {
         return true;
       }
     }
   } catch (e) {
     // Fallback if URL object parsing fails
-    if (authPathKeywords.some(kw => url.includes(kw))) return true;
+    if (authPathSegments.some(seg => url.includes(seg))) return true;
   }
 
-  // 2. Title and Description checks
+  // 2. Title-only checks (strict — require multiple signals to avoid false positives)
   const authTitleKeywords = [
-    'log in', 'sign in', 'sign up', 'create account', 'register account',
-    'forgot password', 'reset password', 'two-factor', '2fa', 'verification',
-    'authentication required', 'sign into', 'welcome back', 'log in or sign up',
-    'get started for free', 'join now'
+    'log in to', 'sign in to', 'sign up for', 'create your account',
+    'forgot password', 'reset your password', 'two-factor authentication',
+    'verification required', 'authentication required', 'enter your password'
   ];
-  if (authTitleKeywords.some(kw => title.includes(kw) || description.includes(kw))) {
+  if (authTitleKeywords.some(kw => title.includes(kw))) {
     return true;
   }
 
-  // 3. Dynamic DOM inspection for credentials fields & active login elements
-  if (document.querySelector('input[type="password"]') || document.querySelector('input[autocomplete*="password"]')) {
+  // 3. Dynamic DOM inspection — only block if there is an actual password field visible
+  const pwField = document.querySelector('input[type="password"]');
+  if (pwField && !pwField.closest('[hidden]') && !pwField.closest('[style*="display:none"]') && !pwField.closest('[style*="display: none"]')) {
     return true;
   }
 
-  // Heuristic: If we are on a known AI domain but the title contains log in/sign up prompts, block it
+  // 4. AI domain specific: if the page title explicitly says log in / sign in AND is on a known AI domain
   const domain = new URL(metadata.url).hostname.toLowerCase();
-  const isAiDomain = AI_DOMAINS.some(d => domain.includes(d.toLowerCase()));
-  if (isAiDomain && (title.includes('log in') || title.includes('sign up') || title.includes('sign in'))) {
+  const isKnownAiDomain = AI_DOMAINS.some(d => domain === d || domain.endsWith('.' + d));
+  if (isKnownAiDomain && (title === 'log in' || title === 'sign in' || title === 'sign up' || title.startsWith('log in |') || title.startsWith('sign in |'))) {
     return true;
   }
 
@@ -326,12 +338,17 @@ function sendPageData() {
   });
 }
 
-// Send data when page loads
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', sendPageData);
-} else {
+// Send data when page loads - only once, after DOM is ready
+// Use a single-execution guard to prevent duplicate saves on same page load
+let _pageDataSent = false;
+function sendPageDataOnce() {
+  if (_pageDataSent) return;
+  _pageDataSent = true;
   sendPageData();
 }
 
-// Also send data after a short delay to ensure all content is loaded
-setTimeout(sendPageData, 2000);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', sendPageDataOnce);
+} else {
+  sendPageDataOnce();
+}
