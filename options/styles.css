@@ -1196,3 +1196,47 @@ body.light-theme .toggle-switch input:checked + .slider {
     text-decoration: underline;
 }
 
+/* Dynamic Profile Actions & Sync Cycle Button */
+.profile-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-top: 4px;
+}
+
+.sync-icon-btn {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+}
+
+.sync-icon-btn:hover {
+    color: var(--primary-light);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.sync-cycle-icon {
+    width: 14px;
+    height: 14px;
+    transition: transform var(--transition-fast);
+}
+
+.sync-cycle-icon.rotating {
+    animation: spin 1s linear infinite;
+    color: var(--warning);
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+

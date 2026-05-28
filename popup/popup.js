@@ -30,6 +30,7 @@ const popupSignInBtn = document.getElementById('popupSignInBtn');
 const popupProfileAvatar = document.getElementById('popupProfileAvatar');
 const popupUserEmailDisplay = document.getElementById('popupUserEmailDisplay');
 const popupLogoutBtn = document.getElementById('popupLogoutBtn');
+const popupSyncBtn = document.getElementById('popupSyncBtn');
 const syncStatus = document.getElementById('syncStatus');
 const filterBtns = document.querySelectorAll('.filter-btn');
 
@@ -66,6 +67,7 @@ function setupEventListeners() {
     });
     selectDocBtn.addEventListener('click', openDocSelector);
     popupLogoutBtn.addEventListener('click', logout);
+    popupSyncBtn.addEventListener('click', syncToDrive);
     popupSignInBtn.addEventListener('click', authenticate);
     docSearch.addEventListener('input', filterDocuments);
 
@@ -134,12 +136,14 @@ function checkAuthStatus() {
                 popupUserEmailDisplay.textContent = email;
                 popupProfileAvatar.textContent = email.charAt(0).toUpperCase();
             }
+            if (syncStatus) syncStatus.style.display = 'block';
         } else {
             showAuthSection();
             if (popupSignedOut && popupSignedIn) {
                 popupSignedOut.style.display = 'flex';
                 popupSignedIn.style.display = 'none';
             }
+            if (syncStatus) syncStatus.style.display = 'none';
         }
     });
 }
@@ -403,15 +407,22 @@ function createSiteElement(site) {
  */
 function syncToDrive() {
     syncBtn.disabled = true;
+    if (popupSyncBtn) popupSyncBtn.disabled = true;
+    const syncIcons = document.querySelectorAll('.sync-cycle-icon');
+    syncIcons.forEach(icon => icon.classList.add('rotating'));
+    
     updateSyncStatus('Syncing...');
 
     chrome.runtime.sendMessage({ action: 'syncToDrive' }, (response) => {
+        syncIcons.forEach(icon => icon.classList.remove('rotating'));
+        syncBtn.disabled = false;
+        if (popupSyncBtn) popupSyncBtn.disabled = false;
+        
         if (response.success) {
             updateSyncStatus(response.message);
         } else {
             updateSyncStatus(`Sync failed: ${response.error}`);
         }
-        syncBtn.disabled = false;
     });
 }
 

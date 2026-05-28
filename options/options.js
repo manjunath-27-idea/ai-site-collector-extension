@@ -15,6 +15,7 @@ const sidebarSignInPromoBtn = document.getElementById('sidebarSignInPromoBtn');
 const profileAvatar = document.getElementById('profileAvatar');
 const userEmailDisplay = document.getElementById('userEmailDisplay');
 const sidebarLogoutBtn = document.getElementById('sidebarLogoutBtn');
+const sidebarSyncBtn = document.getElementById('sidebarSyncBtn');
 const syncStatus = document.getElementById('syncStatus');
 const panelTitle = document.getElementById('panelTitle');
 
@@ -93,6 +94,9 @@ function checkAuthStatus() {
             
             autoSyncCheckbox.closest('.toggle-group').style.opacity = '1';
             autoSyncCheckbox.closest('.toggle-group').style.pointerEvents = 'auto';
+
+            // Show sync status badge in header
+            if (syncStatus) syncStatus.style.display = 'inline-block';
         } else {
             // Show signed out profile button
             sidebarSignedOut.style.display = 'flex';
@@ -104,6 +108,9 @@ function checkAuthStatus() {
             
             autoSyncCheckbox.closest('.toggle-group').style.opacity = '0.5';
             autoSyncCheckbox.closest('.toggle-group').style.pointerEvents = 'none';
+
+            // Hide sync status badge in header
+            if (syncStatus) syncStatus.style.display = 'none';
         }
     });
 }
@@ -152,6 +159,7 @@ function setupEventListeners() {
     sidebarSignInBtn.addEventListener('click', authenticate);
     sidebarSignInPromoBtn.addEventListener('click', authenticate);
     sidebarLogoutBtn.addEventListener('click', logout);
+    sidebarSyncBtn.addEventListener('click', syncToDrive);
     syncBtn.addEventListener('click', syncToDrive);
     clearBtn.addEventListener('click', clearAllSites);
     selectDocBtn.addEventListener('click', openDocSelector);
@@ -526,15 +534,22 @@ function selectDocument(docId, docName) {
  */
 function syncToDrive() {
     syncBtn.disabled = true;
+    if (sidebarSyncBtn) sidebarSyncBtn.disabled = true;
+    const syncIcons = document.querySelectorAll('.sync-cycle-icon');
+    syncIcons.forEach(icon => icon.classList.add('rotating'));
+    
     updateSyncStatus('Syncing sites to Google Drive...');
 
     chrome.runtime.sendMessage({ action: 'syncToDrive' }, (response) => {
+        syncIcons.forEach(icon => icon.classList.remove('rotating'));
+        syncBtn.disabled = false;
+        if (sidebarSyncBtn) sidebarSyncBtn.disabled = false;
+        
         if (response.success) {
             updateSyncStatus(response.message);
         } else {
             updateSyncStatus(`Sync failed: ${response.error}`);
         }
-        syncBtn.disabled = false;
     });
 }
 

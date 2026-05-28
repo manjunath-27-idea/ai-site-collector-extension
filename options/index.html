@@ -60,7 +60,16 @@
                     <div class="profile-avatar" id="profileAvatar">G</div>
                     <div class="profile-meta">
                         <span id="userEmailDisplay" class="profile-name">Not signed in</span>
-                        <button id="sidebarLogoutBtn" class="logout-link">Sign Out</button>
+                        <div class="profile-actions">
+                            <button id="sidebarLogoutBtn" class="logout-link">Sign Out</button>
+                            <button id="sidebarSyncBtn" class="sync-icon-btn" title="Sync Collection to Drive">
+                                <svg class="sync-cycle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M23 4v6h-6"></path>
+                                    <path d="M1 20v-6h6"></path>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -71,7 +80,7 @@
             <header class="workspace-header">
                 <h1 id="panelTitle">Collected Sites</h1>
                 <div class="header-controls">
-                    <span id="syncStatus" class="status-ready">Sync Ready</span>
+                    <span id="syncStatus" class="status-ready" style="display: none;">Sync Ready</span>
                 </div>
             </header>
 
