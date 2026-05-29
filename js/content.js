@@ -660,6 +660,26 @@ function cleanToMainDomain(urlStr) {
 }
 
 /**
+ * Clean GitHub URLs and titles to the base repository level (github.com/owner/repo)
+ */
+function cleanGitHubMetadata(metadata) {
+  try {
+    const url = new URL(metadata.url);
+    if (url.hostname === 'github.com' || url.hostname === 'www.github.com') {
+      const parts = url.pathname.split('/').filter(Boolean);
+      if (parts.length >= 2) {
+        metadata.url = `https://github.com/${parts[0]}/${parts[1]}`;
+        metadata.title = `GitHub - ${parts[0]}/${parts[1]}`;
+      } else {
+        metadata.url = `https://github.com/`;
+        metadata.title = 'GitHub';
+      }
+    }
+  } catch (e) {}
+  return metadata;
+}
+
+/**
  * Score text against a weighted keyword list. Returns total score.
  */
 function scoreText(text, weightedList) {
@@ -852,7 +872,17 @@ function sendPageData() {
     'remoteUsefulDomains',
     'remoteAuthGateways'
   ], (result) => {
-    const metadata = extractPageMetadata();
+    let metadata = extractPageMetadata();
+
+    // Skip saving the extension's own repository pages to prevent local development clutter
+    if (metadata.url.toLowerCase().includes('ai-site-collector-extension')) {
+      console.log('[AI Site Collector] Skipping: extension repository page.');
+      return;
+    }
+
+    // Clean and normalize GitHub metadata to prevent duplicate repository subpages
+    metadata = cleanGitHubMetadata(metadata);
+
     const hostname = getHostname(metadata.url);
     const isKbMatch = lookupKnowledgeBase(hostname, metadata.url) !== null;
 
