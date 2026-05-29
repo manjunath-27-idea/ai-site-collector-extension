@@ -453,8 +453,8 @@ function createSiteCard(site) {
 
     const type = site.classification.isAI ? 'AI' : 'Useful';
     const typeClass = site.classification.isAI ? 'ai' : 'useful';
-    const confidence = Math.round(site.classification.confidence * 100);
-    const savedDate = new Date(site.savedAt).toLocaleDateString();
+    const confidence = Math.round((site.classification.confidence || 0) * 100);
+    const savedDate = new Date(site.savedAt || site.timestamp || new Date()).toLocaleDateString();
     const features = extractFeatures(site);
 
     div.innerHTML = `

@@ -426,7 +426,7 @@ function createSiteElement(site) {
     // Derive CSS class from label for color coding
     const badgeClass = getBadgeClass(label);
     const confidence = Math.round((site.classification.confidence || 0) * 100);
-    const savedDate = new Date(site.savedAt).toLocaleDateString();
+    const savedDate = new Date(site.savedAt || site.timestamp || new Date()).toLocaleDateString();
     const features = extractFeatures(site);
 
     div.innerHTML = `
