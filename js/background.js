@@ -56,9 +56,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   } else if (request.action === 'getDriveDocument') {
     chrome.storage.local.get(['driveDocId', 'driveDocName'], (result) => {
+      let docName = result.driveDocName;
+      if (docName === 'AI_Site_Collector_Database.txt') {
+        docName = 'AI_Site_Collector_Database';
+        chrome.storage.local.set({ driveDocName: docName });
+      }
       sendResponse({ 
         docId: result.driveDocId,
-        docName: result.driveDocName
+        docName: docName || 'AI_Site_Collector_Database'
       });
     });
     return true;
@@ -100,23 +105,70 @@ function saveSiteData(siteData, tabId) {
         }
       });
     } else {
-      // Site already exists: upgrade classification if new data shows it is AI and old data did not
       const existing = sites[existingIndex];
+      
+      // Check if we should upgrade the saved metadata with richer information:
+      let needsUpdate = false;
+      const updatedFields = {};
+
+      // 1. Upgrade description if the new one is richer/longer and not a default fallback
+      const currentDesc = (existing.description || '').trim();
+      const newDesc = (siteData.description || '').trim();
+      
+      const isFallback = (desc) => 
+        desc.includes('detected by domain or keyword') || 
+        desc === 'No description available.' || 
+        desc === 'No description available';
+
+      if (newDesc && newDesc !== currentDesc) {
+        if (isFallback(currentDesc) && !isFallback(newDesc)) {
+          // Upgrade from fallback to real description
+          updatedFields.description = newDesc;
+          needsUpdate = true;
+        } else if (!isFallback(newDesc) && newDesc.length > currentDesc.length) {
+          // Upgrade to longer, more descriptive text
+          updatedFields.description = newDesc;
+          needsUpdate = true;
+        }
+      }
+
+      // 2. Upgrade tags/features if new features/keywords exist and have more items
+      const existingKeywords = existing.keywords || [];
+      const newKeywords = siteData.keywords || [];
+      if (newKeywords.length > existingKeywords.length) {
+        updatedFields.keywords = [...new Set([...existingKeywords, ...newKeywords])];
+        needsUpdate = true;
+      }
+
+      // 3. Upgrade title if the new title is richer or cleaner than the old one
+      const currentTitle = (existing.title || '').trim();
+      const newTitle = (siteData.title || '').trim();
+      if (newTitle && newTitle.length > currentTitle.length && !currentTitle.toLowerCase().includes(newTitle.toLowerCase())) {
+        updatedFields.title = newTitle;
+        needsUpdate = true;
+      }
+
+      // 4. Upgrade classification category from non-AI to AI
       const wasAI = existing.classification && existing.classification.isAI;
       const nowAI = siteData.classification && siteData.classification.isAI;
-      
       if (!wasAI && nowAI) {
-        // Upgrade: update classification and title/description with corrected AI metadata
+        updatedFields.classification = siteData.classification;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
         sites[existingIndex] = {
           ...existing,
-          title: siteData.title,
-          description: siteData.description,
-          classification: siteData.classification,
+          ...updatedFields,
           updatedAt: new Date().toISOString()
         };
-        chrome.storage.local.set({ sites });
+        chrome.storage.local.set({ sites }, () => {
+          // Auto-sync if enabled so the Google Drive database file is updated instantly
+          if (result.autoSyncSetting !== false) {
+            syncToDrive(() => {});
+          }
+        });
       }
-      // If already AI or classification not changed, skip (preserve existing entry as-is)
     }
   });
 }
@@ -170,13 +222,13 @@ function authenticateWithGoogle(sendResponse) {
  * List files in Google Drive
  */
 function listDriveFiles(token, sendResponse) {
-  const REQUIRED_FILENAME = 'AI_Site_Collector_Database.txt';
+  const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
   fetch('https://www.googleapis.com/drive/v3/files?pageSize=50&fields=files(id,name,mimeType,modifiedTime)&q=trashed=false&orderBy=modifiedTime%20desc', {
     headers: { Authorization: 'Bearer ' + token }
   })
   .then(response => response.json())
   .then(data => {
-    // SECURITY MEASURE: Filter files to strictly only allow selection/listing of 'AI_Site_Collector_Database.txt'
+    // SECURITY MEASURE: Filter files to strictly only allow selection/listing of 'AI_Site_Collector_Database'
     const files = data.files || [];
     const filteredFiles = files.filter(f => f.name === REQUIRED_FILENAME);
     sendResponse({ 
@@ -196,7 +248,12 @@ function listDriveFiles(token, sendResponse) {
  * Set the Google Drive document for storage (single document mode)
  */
 function setDriveDocument(docId, docName, sendResponse) {
-  const REQUIRED_FILENAME = 'AI_Site_Collector_Database.txt';
+  const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
+  
+  // Auto-strip .txt suffix on selection to prevent security blockages
+  if (docName === 'AI_Site_Collector_Database.txt') {
+    docName = REQUIRED_FILENAME;
+  }
   
   // SECURITY SANITIZATION: Hard security boundary checking
   if (docName !== REQUIRED_FILENAME) {
@@ -240,9 +297,17 @@ function syncToDrive(sendResponse) {
     }
 
     try {
-      const REQUIRED_FILENAME = 'AI_Site_Collector_Database.txt';
+      const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
       let docId = result.driveDocId;
-      let docName = result.driveDocName || REQUIRED_FILENAME;
+      let docName = result.driveDocName;
+      
+      // Dynamic migration on sync to prevent failures
+      if (docName === 'AI_Site_Collector_Database.txt') {
+        docName = REQUIRED_FILENAME;
+        chrome.storage.local.set({ driveDocName: docName });
+      } else if (!docName) {
+        docName = REQUIRED_FILENAME;
+      }
       
       // SECURITY COMPLIANCE: Hard validation to block writes to any other file name
       if (docName !== REQUIRED_FILENAME) {
@@ -256,7 +321,7 @@ function syncToDrive(sendResponse) {
       }
       
       // Append sites to the document
-      await appendToDocument(result.authToken, docId, sites);
+      const newSitesSyncedCount = await appendToDocument(result.authToken, docId, sites);
       
       chrome.storage.local.set({ 
         lastSync: new Date().toISOString()
@@ -264,7 +329,9 @@ function syncToDrive(sendResponse) {
       
       sendResponse({ 
         success: true, 
-        message: `${sites.length} sites successfully synced to "${docName}"`
+        message: newSitesSyncedCount > 0 
+          ? `${newSitesSyncedCount} new sites successfully synced to "${docName}"`
+          : `Sync completed: Database is already up to date.`
       });
     } catch (error) {
       sendResponse({ 
@@ -279,7 +346,7 @@ function syncToDrive(sendResponse) {
  * Automatically find or create the default sync document in Google Drive
  */
 async function getOrCreateDefaultDoc(token) {
-  const fileName = 'AI_Site_Collector_Database.txt';
+  const fileName = 'AI_Site_Collector_Database';
   
   // 1. Search for existing file with this name
   const queryUrl = `https://www.googleapis.com/drive/v3/files?q=name='${fileName}'+and+trashed=false&fields=files(id,name)`;
@@ -327,7 +394,7 @@ async function getOrCreateDefaultDoc(token) {
   const docId = newFile.id;
   
   // 3. Write initial header content to the newly created file
-  const initialContent = 'AI Site Collector - Secure Sync Database\n========================================\n\n';
+  const initialContent = '# AI Site Collector Sync Database\n\n';
   const uploadResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`, {
     method: 'PATCH',
     headers: {
@@ -369,7 +436,13 @@ function extractFeatures(site) {
   }
   
   // Extract from description
-  const descKeywords = ['free', 'open source', 'api', 'tool', 'platform', 'service', 'framework', 'library', 'automation', 'productivity'];
+  const descKeywords = [
+    'free', 'open source', 'api', 'tool', 'platform', 'service', 'framework', 
+    'library', 'automation', 'productivity', 'agent', 'chatbot', 'chat', 'model', 
+    'image', 'video', 'voice', 'audio', 'design', 'code', 'developer', 'search',
+    'analytics', 'marketing', 'creative', 'llm', 'writing', 'translation', 'database',
+    'security', 'privacy', 'cloud', 'hosting', 'deployment', 'collaboration'
+  ];
   if (site.description) {
     descKeywords.forEach(keyword => {
       if (site.description.toLowerCase().includes(keyword) && !features.includes(keyword)) {
@@ -394,7 +467,7 @@ function generateDocumentContent(sites) {
   content += `${line80}\n\n`;
 
   sites.forEach((site, index) => {
-    const category = site.classification.isAI ? '🤖 AI Platform' : '🔧 Useful Tool';
+    const category = site.classification.isAI ? 'AI Platform' : 'Useful Tool';
     const confidence = Math.round((site.classification.confidence || 0) * 100);
     const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
     // Use the clean description from the knowledge base if available
@@ -428,11 +501,42 @@ async function appendToDocument(token, docId, sites) {
 
     let currentContent = await getResponse.text();
     
-    // Generate new content to append
-    const newContent = generateDocumentContent(sites);
-    
-    // Combine content (append new to existing)
-    const combinedContent = currentContent + newContent;
+    // Filter out sites that are already in the Drive file by checking if the URL is present
+    const newSites = sites.filter(site => !currentContent.includes(site.url));
+    if (newSites.length === 0) {
+      return 0; // No new unique sites to sync
+    }
+
+    // Standardize Markdown headers if the file is empty or does not have them
+    const mdHeader = '# AI Site Collector Sync Database';
+    if (!currentContent.trim() || !currentContent.includes(mdHeader)) {
+      currentContent = mdHeader + '\n\n';
+    }
+
+    // Generate Markdown blocks for the new sites
+    const newBlocks = newSites.map(site => {
+      const features = extractFeatures(site);
+      const category = site.classification.isAI ? 'AI Platform' : 'Useful Tool';
+      const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
+      
+      let block = `### ${site.title}\n`;
+      block += `* **URL:** ${site.url}\n`;
+      block += `* **Type:** ${category}\n`;
+      block += `* **Description:** ${cleanDesc}\n`;
+      if (features.length > 0) {
+        block += `* **Features:** ${features.join(', ')}\n`;
+      }
+      return block;
+    });
+
+    // Make sure we space properly before appending new blocks
+    let combinedContent = currentContent.trim();
+    if (!combinedContent.endsWith('---')) {
+      combinedContent += '\n\n---\n\n';
+    } else {
+      combinedContent += '\n\n';
+    }
+    combinedContent += newBlocks.join('\n---\n\n') + '\n\n---\n';
     
     // Update document with combined content
     const updateResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`, {
@@ -445,7 +549,7 @@ async function appendToDocument(token, docId, sites) {
       throw new Error(`Failed to update Drive document: ${updateResponse.statusText}`);
     }
 
-    return docId;
+    return newSites.length;
   } catch (error) {
     throw new Error(`Append failed: ${error.message}`);
   }

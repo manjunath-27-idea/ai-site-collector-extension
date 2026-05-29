@@ -5,39 +5,89 @@
 
 // ============================================================
 //  STATIC AI KNOWLEDGE BASE
-//  Each entry: { domains[], name, category, description, tags[] }
-//  'domains' are matched against the page hostname (exact or subdomain)
-//  category: 'ai' | 'useful'
+//  Each entry: { domains[], name, category, label, description, tags[] }
+//  category: 'ai' | 'useful' | 'agency'
+//  label   : specific display badge shown in the UI
+//  'domains' matched against page hostname (exact or subdomain suffix)
 // ============================================================
+
+// Label derivation map  -  first matching tag wins
+const TAG_TO_LABEL = [
+  { tag: 'chatbot',      label: 'AI Chatbot'    },
+  { tag: 'search',       label: 'AI Search'     },
+  { tag: 'coding',       label: 'Code AI'       },
+  { tag: 'image',        label: 'Image AI'      },
+  { tag: 'video',        label: 'Video AI'      },
+  { tag: 'music',        label: 'Music AI'      },
+  { tag: 'voice',        label: 'Voice AI'      },
+  { tag: 'audio',        label: 'Voice AI'      },
+  { tag: 'presentation', label: 'Slides AI'     },
+  { tag: 'research',     label: 'Research AI'   },
+  { tag: 'llm',          label: 'AI Model'      },
+  { tag: 'models',       label: 'AI Models'     },
+  { tag: 'inference',    label: 'AI Inference'  },
+  { tag: 'agency',       label: 'Agency'        },
+  { tag: 'design',       label: 'Design Tool'   },
+  { tag: 'productivity', label: 'Productivity'  },
+  { tag: 'deploy',       label: 'Dev Tool'      },
+  { tag: 'documentation',label: 'Docs'          },
+  { tag: 'qa',           label: 'Dev Tool'      },
+  { tag: 'code',         label: 'Dev Tool'      },
+];
+
+function deriveLabelFromTags(category, tags) {
+  if (category === 'agency') return 'Agency';
+  if (category === 'useful') {
+    for (const { tag, label } of TAG_TO_LABEL) {
+      if (tags.includes(tag)) return label;
+    }
+    return 'Useful Tool';
+  }
+  // category === 'ai'
+  for (const { tag, label } of TAG_TO_LABEL) {
+    if (tags.includes(tag)) return label;
+  }
+  return 'AI Tool';
+}
+
 const AI_KNOWLEDGE_BASE = [
-  // ── Conversational AI / LLMs ──
+
+  // â”€â”€ Conversational AI / LLMs â”€â”€
   { domains: ['chat.openai.com','chatgpt.com'], name: 'ChatGPT', category: 'ai',
     description: "OpenAI's flagship conversational AI. Supports GPT-4o for text, images, and code.",
     tags: ['chatbot','gpt','openai','llm'] },
 
   { domains: ['claude.ai'], name: 'Claude', category: 'ai',
-    description: "Anthropic's constitutional AI assistant — focused on safety and helpfulness.",
+    description: "Anthropic's constitutional AI assistant  -  focused on safety and helpfulness.",
     tags: ['chatbot','anthropic','llm','safety'] },
 
   { domains: ['gemini.google.com','bard.google.com'], name: 'Gemini', category: 'ai',
-    description: "Google DeepMind's multimodal AI — integrates with Google Workspace and Search.",
-    tags: ['google','multimodal','llm','chatbot'] },
+    description: "Google DeepMind's multimodal AI  -  integrates with Google Workspace and Search.",
+    tags: ['chatbot','google','multimodal','llm'] },
 
-  { domains: ['copilot.microsoft.com','copilot.microsoft.com'], name: 'Microsoft Copilot', category: 'ai',
+  { domains: ['copilot.microsoft.com'], name: 'Microsoft Copilot', category: 'ai',
     description: "Microsoft's AI assistant powered by GPT-4 and integrated across Office 365.",
-    tags: ['microsoft','copilot','gpt','llm'] },
+    tags: ['chatbot','microsoft','copilot','llm'] },
 
   { domains: ['perplexity.ai'], name: 'Perplexity AI', category: 'ai',
     description: "AI-powered search engine that gives cited, conversational answers in real time.",
     tags: ['search','llm','citations','research'] },
 
   { domains: ['deepseek.com'], name: 'DeepSeek', category: 'ai',
-    description: "High-performance open-source LLM by DeepSeek — strong on coding and reasoning.",
-    tags: ['llm','open-source','coding','reasoning'] },
+    description: "High-performance open-source LLM by DeepSeek  -  strong on coding and reasoning.",
+    tags: ['chatbot','llm','open-source','coding'] },
+
+  { domains: ['kimi.ai', 'kimi.moonshot.cn'], name: 'Kimi AI', category: 'ai',
+    description: "Moonshot AI's flagship chatbot, renowned for its massive context window and Chinese language processing.",
+    tags: ['chatbot','llm','moonshot','context'] },
+
+  { domains: ['manus.im', 'manus.ai'], name: 'Manus', category: 'ai',
+    description: "The first general-purpose AI agent capable of executing multi-step complex workflows in browser sandboxes.",
+    tags: ['agent','chatbot','workflows','productivity'] },
 
   { domains: ['mistral.ai'], name: 'Mistral AI', category: 'ai',
     description: "European open-weight LLM lab offering frontier models like Mistral and Mixtral.",
-    tags: ['llm','open-source','european'] },
+    tags: ['llm','open-source','chatbot'] },
 
   { domains: ['groq.com'], name: 'Groq', category: 'ai',
     description: "Ultra-fast LLM inference platform using custom LPU hardware.",
@@ -48,41 +98,82 @@ const AI_KNOWLEDGE_BASE = [
     tags: ['inference','open-source','cloud','llm'] },
 
   { domains: ['poe.com'], name: 'Poe', category: 'ai',
-    description: "Quora's multi-model AI chat — access GPT-4, Claude, Llama in one place.",
+    description: "Quora's multi-model AI chat  -  access GPT-4, Claude, Llama in one place.",
     tags: ['chatbot','multi-model','quora'] },
 
   { domains: ['you.com'], name: 'You.com', category: 'ai',
     description: "AI search engine with built-in coding assistant and creative tools.",
-    tags: ['search','ai','coding','creative'] },
+    tags: ['search','coding','chatbot'] },
 
   { domains: ['pi.ai'], name: 'Pi AI', category: 'ai',
-    description: "Inflection AI's personal intelligence assistant — designed for emotional support.",
+    description: "Inflection AI's personal intelligence assistant  -  designed for emotional support.",
     tags: ['chatbot','personal','inflection'] },
 
-  // ── Image & Creative AI ──
+  { domains: ['character.ai'], name: 'Character AI', category: 'ai',
+    description: "Create and chat with custom AI characters  -  social AI roleplay platform.",
+    tags: ['chatbot','roleplay','social'] },
+
+  { domains: ['meta.ai'], name: 'Meta AI', category: 'ai',
+    description: "Meta's conversational AI assistant built into WhatsApp, Instagram, and Messenger.",
+    tags: ['chatbot','meta','social'] },
+
+  // â”€â”€ Google AI Products (all variants) â”€â”€
+  { domains: ['aistudio.google.com'], name: 'Google AI Studio', category: 'ai',
+    description: "Google's developer platform for building with Gemini  -  prompt, test, and deploy AI.",
+    tags: ['chatbot','google','developer','llm'] },
+
+  { domains: ['notebooklm.google.com'], name: 'NotebookLM', category: 'ai',
+    description: "Google's AI-powered research notebook  -  upload sources and chat with your documents.",
+    tags: ['research','google','chatbot','documents'] },
+
+  { domains: ['colab.research.google.com','colab.google'], name: 'Google Colab', category: 'ai',
+    description: "Free cloud-hosted Jupyter notebooks by Google  -  with GPU/TPU support for ML.",
+    tags: ['coding','google','jupyter','ml'] },
+
+  { domains: ['lens.google.com'], name: 'Google Lens', category: 'ai',
+    description: "Google's visual AI  -  search with images, identify objects, translate text in photos.",
+    tags: ['image','google','search','vision'] },
+
+  { domains: ['translate.google.com'], name: 'Google Translate', category: 'ai',
+    description: "Google's AI-powered translation  -  supports 130+ languages with neural MT.",
+    tags: ['translation','google','nlp','language'] },
+
+  { domains: ['deepmind.google','deepmind.com'], name: 'Google DeepMind', category: 'ai',
+    description: "Google's AI research lab  -  created Gemini, AlphaFold, AlphaCode, and Lyria.",
+    tags: ['research','google','llm','science'] },
+
+  { domains: ['cloud.google.com/vertex-ai'], name: 'Vertex AI', category: 'ai',
+    description: "Google Cloud's managed ML platform for building, deploying, and scaling AI models.",
+    tags: ['inference','google','cloud','developer'] },
+
+  { domains: ['aitestkitchen.withgoogle.com'], name: 'Google AI Test Kitchen', category: 'ai',
+    description: "Google's experimental AI product lab  -  demos new AI capabilities before public launch.",
+    tags: ['research','google','chatbot','experimental'] },
+
+  { domains: ['ai.google'], name: 'Google AI', category: 'ai',
+    description: "Google's central AI hub  -  research, tools, Gemini, and AI-for-everyone initiatives.",
+    tags: ['research','google','llm','models'] },
+
+  { domains: ['magenta.tensorflow.org'], name: 'Google Magenta', category: 'ai',
+    description: "Google's AI music and art project using machine learning for creative generation.",
+    tags: ['music','google','research','creative'] },
+
+  { domains: ['ai.meta.com'], name: 'Meta AI Research', category: 'ai',
+    description: "Meta's AI research division  -  open-sources Llama models and AI tools.",
+    tags: ['research','llm','open-source','meta'] },
+
+  // â”€â”€ Image AI â”€â”€
   { domains: ['midjourney.com'], name: 'Midjourney', category: 'ai',
-    description: "Leading AI image generator accessed via Discord — produces stunning art.",
+    description: "Leading AI image generator accessed via Discord  -  produces stunning artistic images.",
     tags: ['image','art','generative','creative'] },
 
-  { domains: ['dall-e.openai.com','labs.openai.com'], name: 'DALL·E', category: 'ai',
-    description: "OpenAI's text-to-image model — generates realistic images from text prompts.",
+  { domains: ['dall-e.openai.com','labs.openai.com'], name: 'DALLÂ·E', category: 'ai',
+    description: "OpenAI's text-to-image model  -  generates realistic images from text prompts.",
     tags: ['image','text-to-image','openai','generative'] },
 
   { domains: ['stability.ai','dreamstudio.ai'], name: 'Stable Diffusion', category: 'ai',
     description: "Stability AI's open-source image generation model and DreamStudio platform.",
-    tags: ['image','open-source','generative','stable-diffusion'] },
-
-  { domains: ['runway.com'], name: 'Runway ML', category: 'ai',
-    description: "AI-powered video generation and editing platform. Known for Gen-2 video model.",
-    tags: ['video','image','generative','creative'] },
-
-  { domains: ['sora.com','openai.com/sora'], name: 'Sora', category: 'ai',
-    description: "OpenAI's text-to-video model — generates high-quality videos from text.",
-    tags: ['video','text-to-video','openai','generative'] },
-
-  { domains: ['adobe.com/sensei'], name: 'Adobe Firefly', category: 'ai',
-    description: "Adobe's generative AI — integrated into Photoshop, Illustrator, and Express.",
-    tags: ['image','generative','adobe','creative'] },
+    tags: ['image','open-source','generative'] },
 
   { domains: ['ideogram.ai'], name: 'Ideogram', category: 'ai',
     description: "AI image generator with exceptional text rendering within images.",
@@ -90,96 +181,35 @@ const AI_KNOWLEDGE_BASE = [
 
   { domains: ['playground.ai'], name: 'Playground AI', category: 'ai',
     description: "Free AI image creator powered by Stable Diffusion with a clean UI.",
-    tags: ['image','generative','free','stable-diffusion'] },
+    tags: ['image','generative','free'] },
 
   { domains: ['leonardo.ai'], name: 'Leonardo AI', category: 'ai',
-    description: "AI image and asset generator — popular for game art and concept design.",
+    description: "AI image and asset generator  -  popular for game art and concept design.",
     tags: ['image','game','generative','design'] },
 
-  { domains: ['canva.com'], name: 'Canva', category: 'useful',
-    description: "Graphic design platform with AI-powered tools for templates, images, and video.",
-    tags: ['design','templates','ai','creative'] },
-
-  // ── Code AI ──
-  { domains: ['github.com/features/copilot','copilot.github.com'], name: 'GitHub Copilot', category: 'ai',
-    description: "AI pair programmer by GitHub/OpenAI — autocompletes code in your IDE.",
-    tags: ['coding','copilot','github','llm'] },
-
-  { domains: ['cursor.sh','cursor.com'], name: 'Cursor', category: 'ai',
-    description: "AI-first code editor built on VSCode — uses GPT-4 for inline code generation.",
-    tags: ['coding','editor','gpt','ide'] },
-
-  { domains: ['replit.com'], name: 'Replit', category: 'ai',
-    description: "Cloud IDE with AI coding assistant — build, run, and deploy apps in browser.",
-    tags: ['coding','cloud-ide','ai','deploy'] },
-
-  { domains: ['codeium.com'], name: 'Codeium', category: 'ai',
-    description: "Free AI code completion tool — supports 70+ languages and major IDEs.",
-    tags: ['coding','autocomplete','free','ide'] },
-
-  { domains: ['tabnine.com'], name: 'Tabnine', category: 'ai',
-    description: "AI code assistant that learns from your codebase — privacy-first approach.",
-    tags: ['coding','autocomplete','privacy','ide'] },
-
-  { domains: ['v0.dev'], name: 'v0 by Vercel', category: 'ai',
-    description: "Vercel's AI that generates React UI components from text prompts.",
-    tags: ['coding','ui','react','vercel'] },
-
-  { domains: ['bolt.new'], name: 'Bolt.new', category: 'ai',
-    description: "AI full-stack web app builder — generates and deploys complete apps instantly.",
-    tags: ['coding','full-stack','deploy','builder'] },
-
-  // ── AI Research / ML Platforms ──
-  { domains: ['huggingface.co'], name: 'HuggingFace', category: 'ai',
-    description: "The AI community hub — hosts 300,000+ models, datasets, and Spaces demos.",
-    tags: ['models','open-source','research','community'] },
-
-  { domains: ['replicate.com'], name: 'Replicate', category: 'ai',
-    description: "Run ML models in the cloud via a simple API — no GPU setup required.",
-    tags: ['models','api','cloud','ml'] },
-
-  { domains: ['cohere.com'], name: 'Cohere', category: 'ai',
-    description: "Enterprise NLP platform — powerful embedding and generation APIs for business.",
-    tags: ['nlp','api','enterprise','embedding'] },
-
-  { domains: ['anthropic.com'], name: 'Anthropic', category: 'ai',
-    description: "AI safety company building Claude — focuses on interpretable and safe AI.",
-    tags: ['research','safety','llm','anthropic'] },
-
-  { domains: ['openai.com'], name: 'OpenAI', category: 'ai',
-    description: "Creator of GPT, DALL·E, and Whisper — leading AI research organization.",
-    tags: ['research','gpt','openai','api'] },
-
-  { domains: ['google.com/deepmind','deepmind.google'], name: 'Google DeepMind', category: 'ai',
-    description: "Google's AI research lab — created Gemini, AlphaFold, and AlphaCode.",
-    tags: ['research','google','deepmind','science'] },
-
-  { domains: ['ai.meta.com'], name: 'Meta AI', category: 'ai',
-    description: "Meta's AI division — open-sources Llama models and builds AI into social apps.",
-    tags: ['research','llama','open-source','meta'] },
-
-  { domains: ['elevenlabs.io'], name: 'ElevenLabs', category: 'ai',
-    description: "Hyper-realistic AI voice generation — clone voices, create audiobooks and dubs.",
-    tags: ['voice','audio','tts','generative'] },
-
-  { domains: ['suno.ai'], name: 'Suno', category: 'ai',
-    description: "AI music generator — create full songs with vocals from a text prompt.",
-    tags: ['music','audio','generative','creative'] },
-
-  { domains: ['udio.com'], name: 'Udio', category: 'ai',
-    description: "AI music creation platform for generating professional-quality songs.",
-    tags: ['music','audio','generative'] },
-
-  { domains: ['luma.ai'], name: 'Luma AI', category: 'ai',
-    description: "AI video and 3D generation — create photorealistic 3D scenes from photos.",
-    tags: ['video','3d','generative','creative'] },
+  { domains: ['adobe.com'], name: 'Adobe Firefly', category: 'ai',
+    description: "Adobe's generative AI  -  integrated into Photoshop, Illustrator, and Express.",
+    tags: ['image','generative','adobe','creative'] },
 
   { domains: ['krea.ai'], name: 'Krea AI', category: 'ai',
     description: "Real-time AI image and video generation with live canvas editing.",
     tags: ['image','video','realtime','generative'] },
 
+  // â”€â”€ Video AI â”€â”€
+  { domains: ['runway.com'], name: 'Runway ML', category: 'ai',
+    description: "AI-powered video generation and editing platform. Known for Gen-2 video model.",
+    tags: ['video','generative','creative'] },
+
+  { domains: ['sora.com'], name: 'Sora', category: 'ai',
+    description: "OpenAI's text-to-video model  -  generates high-quality videos from text.",
+    tags: ['video','text-to-video','openai','generative'] },
+
+  { domains: ['luma.ai'], name: 'Luma AI', category: 'ai',
+    description: "AI video and 3D generation  -  create photorealistic 3D scenes from photos.",
+    tags: ['video','3d','generative','creative'] },
+
   { domains: ['kling.ai'], name: 'Kling AI', category: 'ai',
-    description: "Kuaishou's video generation AI — creates high-quality videos from text or image.",
+    description: "Kuaishou's video generation AI  -  creates high-quality videos from text or image.",
     tags: ['video','generative','text-to-video'] },
 
   { domains: ['synthesia.io'], name: 'Synthesia', category: 'ai',
@@ -187,86 +217,169 @@ const AI_KNOWLEDGE_BASE = [
     tags: ['video','avatar','business','generative'] },
 
   { domains: ['descript.com'], name: 'Descript', category: 'ai',
-    description: "AI-powered video and podcast editor — edit media like a document.",
-    tags: ['video','audio','editing','ai'] },
+    description: "AI-powered video and podcast editor  -  edit media like a document.",
+    tags: ['video','audio','editing'] },
 
+  // â”€â”€ Voice / Music AI â”€â”€
+  { domains: ['elevenlabs.io'], name: 'ElevenLabs', category: 'ai',
+    description: "Hyper-realistic AI voice generation  -  clone voices, create audiobooks and dubs.",
+    tags: ['voice','audio','tts','generative'] },
+
+  { domains: ['suno.ai'], name: 'Suno', category: 'ai',
+    description: "AI music generator  -  create full songs with vocals from a text prompt.",
+    tags: ['music','audio','generative'] },
+
+  { domains: ['udio.com'], name: 'Udio', category: 'ai',
+    description: "AI music creation platform for generating professional-quality songs.",
+    tags: ['music','audio','generative'] },
+
+  // â”€â”€ Code AI â”€â”€
+  { domains: ['cursor.sh','cursor.com'], name: 'Cursor', category: 'ai',
+    description: "AI-first code editor built on VSCode  -  uses GPT-4 for inline code generation.",
+    tags: ['coding','editor','llm','ide'] },
+
+  { domains: ['replit.com'], name: 'Replit', category: 'ai',
+    description: "Cloud IDE with AI coding assistant  -  build, run, and deploy apps in browser.",
+    tags: ['coding','cloud-ide','deploy'] },
+
+  { domains: ['codeium.com'], name: 'Codeium', category: 'ai',
+    description: "Free AI code completion tool  -  supports 70+ languages and major IDEs.",
+    tags: ['coding','autocomplete','free'] },
+
+  { domains: ['tabnine.com'], name: 'Tabnine', category: 'ai',
+    description: "AI code assistant that learns from your codebase  -  privacy-first approach.",
+    tags: ['coding','autocomplete','privacy'] },
+
+  { domains: ['v0.dev'], name: 'v0 by Vercel', category: 'ai',
+    description: "Vercel's AI that generates React UI components from text prompts.",
+    tags: ['coding','ui','react'] },
+
+  { domains: ['bolt.new'], name: 'Bolt.new', category: 'ai',
+    description: "AI full-stack web app builder  -  generates and deploys complete apps instantly.",
+    tags: ['coding','full-stack','deploy','builder'] },
+
+  // â”€â”€ AI Research / ML Platforms â”€â”€
+  { domains: ['huggingface.co'], name: 'HuggingFace', category: 'ai',
+    description: "The AI community hub  -  hosts 300,000+ models, datasets, and Spaces demos.",
+    tags: ['models','open-source','research','community'] },
+
+  { domains: ['replicate.com'], name: 'Replicate', category: 'ai',
+    description: "Run ML models in the cloud via a simple API  -  no GPU setup required.",
+    tags: ['models','api','cloud','inference'] },
+
+  { domains: ['cohere.com'], name: 'Cohere', category: 'ai',
+    description: "Enterprise NLP platform  -  powerful embedding and generation APIs for business.",
+    tags: ['llm','api','inference','enterprise'] },
+
+  { domains: ['anthropic.com'], name: 'Anthropic', category: 'ai',
+    description: "AI safety company building Claude  -  focuses on interpretable and safe AI.",
+    tags: ['research','safety','llm'] },
+
+  { domains: ['openai.com'], name: 'OpenAI', category: 'ai',
+    description: "Creator of GPT, DALLÂ·E, and Whisper  -  leading AI research organization.",
+    tags: ['research','llm','models'] },
+
+  // â”€â”€ Presentations / Productivity AI â”€â”€
   { domains: ['gamma.app'], name: 'Gamma', category: 'ai',
-    description: "AI presentation and document creator — generates slides from text prompts.",
+    description: "AI presentation and document creator  -  generates slides from text prompts.",
     tags: ['presentation','documents','generative','productivity'] },
 
   { domains: ['beautiful.ai'], name: 'Beautiful.ai', category: 'ai',
     description: "AI-powered presentation software that auto-designs slides as you type.",
-    tags: ['presentation','design','ai','productivity'] },
+    tags: ['presentation','design','productivity'] },
+
+  { domains: ['canva.com'], name: 'Canva', category: 'useful',
+    description: "Graphic design platform with AI-powered tools for templates, images, and video.",
+    tags: ['design','templates','creative'] },
 
   { domains: ['notion.so'], name: 'Notion', category: 'useful',
     description: "All-in-one workspace for notes, wikis, databases, and project management with AI.",
-    tags: ['productivity','notes','ai','workspace'] },
+    tags: ['productivity','notes','workspace'] },
 
   { domains: ['linear.app'], name: 'Linear', category: 'useful',
-    description: "Modern project management tool for software teams — fast and opinionated.",
-    tags: ['productivity','project-management','development'] },
+    description: "Modern project management tool for software teams  -  fast and opinionated.",
+    tags: ['productivity','project-management'] },
 
-  // ── Search / Research AI ──
+  // â”€â”€ AI Search / Research â”€â”€
   { domains: ['phind.com'], name: 'Phind', category: 'ai',
-    description: "AI search engine optimized for developers — gives detailed code-aware answers.",
-    tags: ['search','coding','developer','llm'] },
+    description: "AI search engine optimized for developers  -  gives detailed code-aware answers.",
+    tags: ['search','coding','developer'] },
 
   { domains: ['kagi.com'], name: 'Kagi', category: 'ai',
     description: "Premium ad-free search engine with built-in AI summarization and assistant.",
-    tags: ['search','ai','privacy','premium'] },
+    tags: ['search','privacy','premium'] },
 
   { domains: ['consensus.app'], name: 'Consensus', category: 'ai',
     description: "AI research tool that surfaces evidence from 200M scientific papers.",
-    tags: ['research','science','search','academic'] },
+    tags: ['research','science','search'] },
 
   { domains: ['elicit.org'], name: 'Elicit', category: 'ai',
     description: "AI research assistant that automates literature review and data extraction.",
-    tags: ['research','academic','literature','ai'] },
+    tags: ['research','academic','literature'] },
 
-  // ── Developer / Useful Tools ──
+  // â”€â”€ Developer / Useful Tools â”€â”€
   { domains: ['github.com'], name: 'GitHub', category: 'useful',
-    description: "The world's largest code hosting platform — version control, CI/CD, and collaboration.",
+    description: "The world's largest code hosting platform  -  version control, CI/CD, and collaboration.",
     tags: ['code','git','open-source','collaboration'] },
 
   { domains: ['stackoverflow.com'], name: 'Stack Overflow', category: 'useful',
-    description: "The premier Q&A platform for developers — answers to nearly every coding question.",
+    description: "The premier Q&A platform for developers  -  answers to nearly every coding question.",
     tags: ['qa','community','coding','developer'] },
 
   { domains: ['vercel.com'], name: 'Vercel', category: 'useful',
-    description: "Cloud platform for frontend deployment — instant deploys from Git with Edge Network.",
+    description: "Cloud platform for frontend deployment  -  instant deploys from Git with Edge Network.",
     tags: ['deploy','hosting','frontend','developer'] },
 
   { domains: ['netlify.com'], name: 'Netlify', category: 'useful',
     description: "Jamstack hosting platform with CI/CD, serverless functions, and form handling.",
-    tags: ['deploy','hosting','jamstack','developer'] },
+    tags: ['deploy','hosting','jamstack'] },
 
   { domains: ['figma.com'], name: 'Figma', category: 'useful',
-    description: "Collaborative UI/UX design tool — the industry standard for interface design.",
+    description: "Collaborative UI/UX design tool  -  the industry standard for interface design.",
     tags: ['design','ui','ux','collaboration'] },
 
   { domains: ['npmjs.com'], name: 'npm', category: 'useful',
-    description: "The Node.js package registry — home to 2M+ open-source JavaScript packages.",
-    tags: ['packages','javascript','node','open-source'] },
+    description: "The Node.js package registry  -  home to 2M+ open-source JavaScript packages.",
+    tags: ['code','packages','javascript','open-source'] },
 
   { domains: ['developer.mozilla.org','mdn.mozilla.org'], name: 'MDN Web Docs', category: 'useful',
-    description: "The authoritative reference for HTML, CSS, and JavaScript — by Mozilla.",
-    tags: ['documentation','web','html','css','javascript'] },
+    description: "The authoritative reference for HTML, CSS, and JavaScript  -  by Mozilla.",
+    tags: ['documentation','web','html','javascript'] },
 
   { domains: ['stackblitz.com'], name: 'StackBlitz', category: 'useful',
-    description: "Online IDE that runs Node.js projects in your browser — no install needed.",
-    tags: ['ide','online','javascript','developer'] },
+    description: "Online IDE that runs Node.js projects in your browser  -  no install needed.",
+    tags: ['code','ide','online','javascript'] },
 
   { domains: ['codepen.io'], name: 'CodePen', category: 'useful',
-    description: "Frontend code playground — build, share, and discover HTML/CSS/JS demos.",
-    tags: ['frontend','playground','demo','developer'] },
+    description: "Frontend code playground  -  build, share, and discover HTML/CSS/JS demos.",
+    tags: ['code','frontend','playground','demo'] },
 
   { domains: ['react.dev'], name: 'React Docs', category: 'useful',
-    description: "Official React documentation — guides, API reference, and interactive tutorials.",
-    tags: ['react','documentation','frontend','javascript'] },
+    description: "Official React documentation  -  guides, API reference, and interactive tutorials.",
+    tags: ['documentation','react','frontend','javascript'] },
 
   { domains: ['trello.com'], name: 'Trello', category: 'useful',
-    description: "Kanban-style project management boards by Atlassian — simple drag-and-drop workflow.",
-    tags: ['productivity','kanban','project-management'] }
+    description: "Kanban-style project management boards by Atlassian  -  drag-and-drop workflow.",
+    tags: ['productivity','kanban','project-management'] },
+
+  // â”€â”€ Agency / Business .ai sites â”€â”€
+  // These use a .ai domain but are NOT AI tools  -  they are creative/tech agencies.
+  // Stored with category='agency' so users know their actual purpose.
+  { domains: ['modern.ai'], name: 'Modern.AI', category: 'agency',
+    description: "A creative agency offering AI-powered marketing, branding, and digital services.",
+    tags: ['agency','marketing','branding','creative'] },
+
+  { domains: ['agency.ai'], name: 'Agency AI', category: 'agency',
+    description: "AI-focused digital agency providing strategy and implementation services.",
+    tags: ['agency','strategy','digital'] },
+
+  { domains: ['10x.ai'], name: '10x.ai', category: 'agency',
+    description: "AI consulting and automation agency helping businesses scale with AI.",
+    tags: ['agency','consulting','automation'] },
+
+  { domains: ['axiom.ai'], name: 'Axiom.ai', category: 'useful',
+    description: "Browser automation tool  -  build web bots and automate workflows without code.",
+    tags: ['automation','productivity','no-code'] }
 ];
 
 // ============================================================
@@ -282,6 +395,11 @@ const WEIGHTED_AI_KEYWORDS = [
   { term: 'llm',              weight: 10 },
   { term: 'large language model', weight: 10 },
   { term: 'generative ai',    weight: 10 },
+  { term: 'ai agent',         weight: 10 },
+  { term: 'autonomous agent', weight: 10 },
+  { term: 'agentic',          weight: 10 },
+  { term: 'chatgpt',          weight: 10 },
+  { term: 'deepseek',         weight: 10 },
   { term: 'text-to-image',    weight: 9  },
   { term: 'text-to-video',    weight: 9  },
   { term: 'text-to-speech',   weight: 9  },
@@ -289,6 +407,8 @@ const WEIGHTED_AI_KEYWORDS = [
   { term: 'ai assistant',     weight: 8  },
   { term: 'language model',   weight: 8  },
   { term: 'image generation', weight: 8  },
+  { term: 'ai tool',          weight: 6  },
+  { term: 'ai platform',      weight: 6  },
   { term: 'generative',       weight: 6  },
   { term: 'machine learning', weight: 6  },
   { term: 'deep learning',    weight: 6  },
@@ -304,7 +424,7 @@ const WEIGHTED_AI_KEYWORDS = [
   { term: 'embedding',        weight: 3  },
   { term: 'inference',        weight: 3  },
   { term: 'prompt',           weight: 2  },
-  { term: 'ai',               weight: 1  }  // very common – needs to combine with others
+  { term: 'ai',               weight: 1  }  // very common â€“ needs to combine with others
 ];
 
 // Minimum score to classify as AI via keyword scoring (fallback only)
@@ -367,7 +487,7 @@ function extractPageMetadata() {
   if (favicon) metadata.favicon = favicon.getAttribute('href') || '';
 
   const kwMeta = document.querySelector('meta[name="keywords"]');
-  if (kwMeta) {
+  if (kwMeta && kwMeta.getAttribute('content')) {
     metadata.keywords = kwMeta.getAttribute('content').split(',').map(k => k.trim()).filter(Boolean);
   }
 
@@ -404,7 +524,7 @@ function lookupKnowledgeBase(hostname) {
 
 /**
  * Check if the page is an authentication / system page that should NOT be stored.
- * Returns true → skip this page.
+ * Returns true â†’ skip this page.
  */
 function isAuthenticationOrSystemPage(metadata, remoteAuthList) {
   const title = metadata.title.toLowerCase();
@@ -492,24 +612,27 @@ function scoreText(text, weightedList) {
 //  MAIN CLASSIFIER
 // ============================================================
 /**
- * Classify a page. Returns { isAI, isUseful, confidence, name, description, reasons[] }
+ * Classify a page. Returns { isAI, isUseful, isAgency, label, confidence, name, description, reasons[] }
  *
  * Pipeline (strict priority):
- *  1. Knowledge Base exact match        → isAI/isUseful=true, confidence=1.0
- *  2. Knowledge Base subdomain match    → confidence=0.97
- *  3. Known useful domain whitelist     → isUseful=true, confidence=0.90
- *  4. .ai TLD + corroboration           → isAI=true, confidence=0.88
- *  5. Weighted AI keyword score >= 10   → isAI=true, confidence scaled
- *  6. Weighted useful keyword score >=5 → isUseful=true, confidence scaled
+ *  1. Knowledge Base exact / subdomain match  â†’ immediate return with KB label
+ *  2. Remote AI domain list (GitHub sync)     â†’ isAI=true, label='AI Tool'
+ *  3. Known useful domain whitelist           â†’ isUseful=true
+ *  4. .ai TLD WITH corroboration             â†’ isAI=true, label='AI Tool'
+ *  5. .ai TLD WITHOUT corroboration          â†’ isAgency=true, label='Agency'
+ *  6. Custom AI keywords                     â†’ isAI=true
+ *  7. Weighted AI keyword score >= 10        â†’ isAI=true
+ *  8. Weighted useful keyword score >= 5     â†’ isUseful=true
  */
 function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remoteAiDomains) {
   const hostname = getHostname(metadata.url);
-  // Only scan title + description for keywords, NOT the URL (domain already handled separately)
   const text = (metadata.title + ' ' + (metadata.description || '')).toLowerCase();
 
   const result = {
     isAI: false,
     isUseful: false,
+    isAgency: false,
+    label: '',
     confidence: 0,
     name: null,
     description: null,
@@ -520,15 +643,39 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
   const kbEntry = lookupKnowledgeBase(hostname);
   if (kbEntry) {
     if (kbEntry.category === 'ai') result.isAI = true;
+    else if (kbEntry.category === 'agency') {
+      result.isAgency = true;
+      result.isUseful = true; // store in useful bucket so it appears in the list
+    }
     else result.isUseful = true;
     result.confidence = 1.0;
     result.name = kbEntry.name;
     result.description = kbEntry.description;
     result.reasons = ['Verified knowledge base entry'];
-    return result; // immediate return — no further checks needed
+    return result; // immediate return  -  no further checks needed
   }
 
-  // ── STEP 2: Remote AI domain list (synced from GitHub) ──
+  // ── DYNAMIC DESCRIPTION/TITLE SHORTCUT TRIGGERS (Kimi/Manus direct catchers) ──
+  const descLower = (metadata.description || '').toLowerCase();
+  const titleLower = (metadata.title || '').toLowerCase();
+  const combineText = titleLower + ' ' + descLower;
+
+  const hasDirectAiKeyword = 
+    /\bai\b/i.test(combineText) || 
+    /\bagent\b/i.test(combineText) || 
+    /artificial intelligence/i.test(combineText) ||
+    /artificial intelligent/i.test(combineText) ||
+    /\bagentic\b/i.test(combineText);
+
+  if (hasDirectAiKeyword) {
+    result.isAI = true;
+    result.confidence = Math.max(result.confidence, 0.85);
+    result.label = 'AI Tool';
+    result.reasons.push('Direct AI/Agent keyword matched in page metadata');
+    return result; // immediate return - successfully identified
+  }
+
+  // â”€â”€ STEP 2: Remote AI domain list (synced from GitHub) â”€â”€
   const joinedAiDomains = [...(remoteAiDomains || [])];
   const remoteMatch = joinedAiDomains.some(d => {
     const rd = d.replace(/^www\./, '').toLowerCase();
@@ -537,6 +684,7 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
   if (remoteMatch) {
     result.isAI = true;
     result.confidence = 0.95;
+    result.label = 'AI Tool';
     result.reasons.push('Remote AI domain list match');
   }
 
@@ -548,14 +696,13 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
   if (usefulDomainMatch && !result.isAI) {
     result.isUseful = true;
     result.confidence = Math.max(result.confidence, 0.90);
+    result.label = 'Useful Tool';
     result.reasons.push('Known useful platform domain');
   }
 
   // ── STEP 4: .ai TLD with corroboration ──
-  // A .ai TLD alone is NOT enough — it needs a supporting signal
   const isAiTld = hostname.endsWith('.ai') || hostname.includes('.ai.');
-  if (isAiTld && !result.isAI) {
-    // Corroboration: the title/description must mention AI-related terms
+  if (isAiTld && !result.isAI && !result.isAgency) {
     const aiCorroboration = /\bai\b/.test(text) ||
       text.includes('artificial intelligence') ||
       text.includes('machine learning') ||
@@ -566,9 +713,9 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
     if (aiCorroboration) {
       result.isAI = true;
       result.confidence = Math.max(result.confidence, 0.88);
+      result.label = 'AI Tool';
       result.reasons.push('.ai domain with AI content corroboration');
     }
-    // Without corroboration: .ai TLD is an agency/business, not classified as AI
   }
 
   // ── STEP 5: Custom AI keywords (user-added) ──
@@ -577,11 +724,11 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
     if (customHits.length >= 1) {
       result.isAI = true;
       result.confidence = Math.max(result.confidence, 0.80);
+      result.label = 'AI Tool';
       result.reasons.push(`Custom AI keyword match: ${customHits.slice(0, 2).join(', ')}`);
     }
   }
 
-  // Early exit if already classified as AI
   if (result.isAI) return result;
 
   // ── STEP 6: Weighted AI keyword scoring (fallback) ──
@@ -593,14 +740,14 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
 
   if (aiScore >= AI_SCORE_THRESHOLD) {
     result.isAI = true;
-    // Scale confidence: threshold=10 → 0.60, score=20 → 0.80, score=30+ → 0.90
     result.confidence = Math.min(0.90, 0.50 + (aiScore / 60));
+    result.label = 'AI Tool';
     result.reasons.push(`AI keyword score: ${aiScore} points`);
     return result;
   }
 
   // ── STEP 7: Weighted useful keyword scoring (fallback) ──
-  if (!result.isUseful) {
+  if (!result.isUseful && !result.isAgency) {
     const allUseful = [
       ...WEIGHTED_USEFUL_KEYWORDS,
       ...(customUsefulKeywords || []).map(kw => ({ term: kw.toLowerCase(), weight: 5 }))
@@ -609,6 +756,7 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
 
     if (usefulScore >= USEFUL_SCORE_THRESHOLD) {
       result.isUseful = true;
+      result.label = 'Useful Tool';
       result.confidence = Math.min(0.85, 0.50 + (usefulScore / 30));
       result.reasons.push(`Useful keyword score: ${usefulScore} points`);
     }
@@ -629,8 +777,10 @@ function sendPageData() {
     'remoteAuthGateways'
   ], (result) => {
     const metadata = extractPageMetadata();
+    const hostname = getHostname(metadata.url);
+    const isKbMatch = lookupKnowledgeBase(hostname) !== null;
 
-    if (isAuthenticationOrSystemPage(metadata, result.remoteAuthGateways)) {
+    if (!isKbMatch && isAuthenticationOrSystemPage(metadata, result.remoteAuthGateways)) {
       console.log('[AI Site Collector] Skipping: authentication page detected.');
       return;
     }
@@ -642,25 +792,30 @@ function sendPageData() {
       result.remoteAiDomains
     );
 
-    if (!classification.isAI && !classification.isUseful) return;
+    if (!classification.isAI && !classification.isUseful && !classification.isAgency) return;
 
-    // For AI pages: strip to root origin and use KB name / clean description
-    if (classification.isAI) {
+    // For AI and Agency pages: strip to root origin and use KB name / clean description
+    if (classification.isAI || classification.isAgency) {
       metadata.url = cleanToMainDomain(metadata.url);
       if (classification.name) {
         metadata.title = classification.name;
       } else {
-        // Fallback: capitalize first domain segment
         try {
           const h = new URL(metadata.url).hostname.replace(/^www\./, '');
           const seg = h.split('.')[0];
           metadata.title = seg.charAt(0).toUpperCase() + seg.slice(1);
         } catch { /* keep original */ }
       }
-      if (classification.description) {
-        metadata.description = classification.description;
-      } else {
-        metadata.description = 'AI platform — detected by domain or keyword analysis.';
+      // Prioritize live extracted page description over static database description
+      const hasLiveDesc = metadata.description && metadata.description.trim().length > 0;
+      if (!hasLiveDesc) {
+        if (classification.description) {
+          metadata.description = classification.description;
+        } else {
+          metadata.description = classification.isAgency 
+            ? 'Agency platform  -  detected by domain or keyword analysis.' 
+            : 'AI platform  -  detected by domain or keyword analysis.';
+        }
       }
     }
 
@@ -673,13 +828,13 @@ function sendPageData() {
       }
     }, (response) => {
       if (chrome.runtime.lastError) {
-        // Background service worker not ready yet — silently ignore
+        // Background service worker not ready yet  -  silently ignore
       }
     });
   });
 }
 
-// ── Single-shot guard: fire exactly once per page load ──
+// â”€â”€ Single-shot guard: fire exactly once per page load â”€â”€
 let _pageDataSent = false;
 function sendPageDataOnce() {
   if (_pageDataSent) return;

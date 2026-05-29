@@ -249,6 +249,7 @@ function openDocSelector() {
  * Load Google Drive files
  */
 function loadDriveFiles() {
+    if (!docList) return;
     docList.innerHTML = '<p class="loading">Loading documents...</p>';
     
     chrome.runtime.sendMessage({ action: 'listDriveFiles' }, (response) => {
@@ -265,6 +266,7 @@ function loadDriveFiles() {
  * Render document list
  */
 function renderDocumentList(files) {
+    if (!docList) return;
     if (files.length === 0) {
         docList.innerHTML = '<p class="empty">No documents found in your Drive</p>';
         return;
@@ -380,16 +382,19 @@ function createSiteElement(site) {
     const div = document.createElement('div');
     div.className = 'site-item';
 
-    const type = site.classification.isAI ? 'AI' : 'Useful';
-    const typeClass = site.classification.isAI ? 'ai' : 'useful';
-    const confidence = Math.round(site.classification.confidence * 100);
+    // Use the specific label from classification, fallback to AI/Useful
+    const label = (site.classification && site.classification.label) ||
+                  (site.classification.isAI ? 'AI Tool' : 'Useful Tool');
+    // Derive CSS class from label for color coding
+    const badgeClass = getBadgeClass(label);
+    const confidence = Math.round((site.classification.confidence || 0) * 100);
     const savedDate = new Date(site.savedAt).toLocaleDateString();
     const features = extractFeatures(site);
 
     div.innerHTML = `
         <div class="site-header">
             <div class="site-title">${escapeHtml(site.title)}</div>
-            <span class="site-badge ${typeClass}">${type}</span>
+            <span class="site-badge ${badgeClass}">${escapeHtml(label)}</span>
         </div>
         <div class="site-description">${escapeHtml(site.description || 'No description available')}</div>
         <div class="site-url">${escapeHtml(site.url)}</div>
@@ -413,6 +418,29 @@ function createSiteElement(site) {
 
     return div;
 }
+
+/**
+ * Derive a CSS badge class from a label string
+ */
+function getBadgeClass(label) {
+    if (!label) return 'useful';
+    const l = label.toLowerCase();
+    if (l.includes('chatbot') || l.includes('chatgpt') || l === 'ai chatbot') return 'badge-chatbot';
+    if (l.includes('image'))      return 'badge-image';
+    if (l.includes('video'))      return 'badge-video';
+    if (l.includes('music') || l.includes('voice') || l.includes('audio')) return 'badge-audio';
+    if (l.includes('code') || l.includes('coding')) return 'badge-code';
+    if (l.includes('search'))     return 'badge-search';
+    if (l.includes('research'))   return 'badge-research';
+    if (l.includes('slides') || l.includes('presentation')) return 'badge-slides';
+    if (l.includes('model') || l.includes('inference')) return 'badge-model';
+    if (l.includes('agency'))     return 'badge-agency';
+    if (l.includes('ai'))         return 'ai';
+    return 'useful';
+}
+
+
+
 
 /**
  * Sync to Google Drive

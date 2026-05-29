@@ -428,7 +428,7 @@ function createSiteCard(site) {
         <div class="site-header">
             <div class="site-title" title="${escapeHtml(site.title)}">${escapeHtml(site.title)}</div>
             <div class="site-badges-box">
-                <span class="site-badge ${typeClass}">${type}</span>
+                <span class="site-badge ${typeClass}">${site.classification.label || type}</span>
             </div>
         </div>
         <div class="site-description">${escapeHtml(site.description || 'No description available')}</div>
@@ -506,6 +506,7 @@ function openDocSelector() {
  * Fetch Google Drive documents
  */
 function loadDriveFiles() {
+    if (!docList) return;
     docList.innerHTML = '<p class="loading">Loading documents from Google Drive...</p>';
     
     chrome.runtime.sendMessage({ action: 'listDriveFiles' }, (response) => {
@@ -522,6 +523,7 @@ function loadDriveFiles() {
  * Render document items inside selector list
  */
 function renderDocumentList(files) {
+    if (!docList) return;
     if (files.length === 0) {
         docList.innerHTML = '<p class="empty">No documents found in your Drive</p>';
         return;
