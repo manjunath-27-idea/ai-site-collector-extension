@@ -239,6 +239,30 @@ const AI_KNOWLEDGE_BASE = [
     tags: ['security', 'pentest', 'vulnerability', 'developer'] },
 
   // ── Code AI ──
+  { domains: ['antigravity.ai', 'antigravity.dev', 'antigravity-ide.com'], name: 'Antigravity IDE', category: 'ai',
+    description: "A state-of-the-art agentic AI coding environment featuring deep repository context, multi-agent coordination, and autotesting capabilities.",
+    tags: ['coding','editor','agent','ide'] },
+
+  { domains: ['copilot.github.com', 'github.com/features/copilot'], name: 'GitHub Copilot', category: 'ai',
+    description: "GitHub's premier AI pair programmer offering autocomplete, repository-aware chat, and autonomous coding agents.",
+    tags: ['coding','copilot','github','agent'] },
+
+  { domains: ['aws.amazon.com/q', 'amazon.com/q', 'aws.amazon.com/codewhisperer'], name: 'Amazon Q Developer', category: 'ai',
+    description: "Amazon's generative AI-powered conversational assistant for developer workflows, built-in code generation, refactoring, and AWS optimization.",
+    tags: ['coding','aws','assistant','cloud'] },
+
+  { domains: ['trae.ai', 'trae.sh'], name: 'Trae', category: 'ai',
+    description: "An adaptive, AI-native development environment designed around agentic loops and deep workspace awareness.",
+    tags: ['coding','editor','agent','ide'] },
+
+  { domains: ['codeium.com/windsurf'], name: 'Windsurf', category: 'ai',
+    description: "The first agentic AI-native IDE, built by Codeium, powered by the Cascade agent flow to execute multi-step changes.",
+    tags: ['coding','editor','agent','ide'] },
+
+  { domains: ['sourcegraph.com/cody', 'cody.sourcegraph.com'], name: 'Sourcegraph Cody', category: 'ai',
+    description: "AI code assistant featuring deep multi-repo context awareness, inline code completion, and codebase analysis.",
+    tags: ['coding','search','context'] },
+
   { domains: ['cursor.sh','cursor.com'], name: 'Cursor', category: 'ai',
     description: "AI-first code editor built on VSCode  -  uses GPT-4 for inline code generation.",
     tags: ['coding','editor','llm','ide'] },
@@ -526,12 +550,30 @@ function getHostname(urlStr) {
  * Returns the KB entry if matched, otherwise null.
  * Tries exact match first, then subdomain suffix match.
  */
-function lookupKnowledgeBase(hostname) {
+function lookupKnowledgeBase(hostname, urlStr) {
+  let pathname = '';
+  try {
+    if (urlStr) {
+      pathname = new URL(urlStr).pathname.toLowerCase();
+    }
+  } catch { /* ignore parsing errors */ }
+
+  const fullPathStr = (hostname + pathname).toLowerCase();
+
   for (const entry of AI_KNOWLEDGE_BASE) {
     for (const d of entry.domains) {
       const kbDomain = d.replace(/^www\./, '').toLowerCase();
-      if (hostname === kbDomain || hostname.endsWith('.' + kbDomain)) {
-        return entry;
+      
+      // If the knowledge base entry has a path (contains a slash)
+      if (kbDomain.includes('/')) {
+        if (fullPathStr === kbDomain || fullPathStr.startsWith(kbDomain + '/') || fullPathStr.startsWith(kbDomain + '?')) {
+          return entry;
+        }
+      } else {
+        // Hostname exact match or subdomain suffix match
+        if (hostname === kbDomain || hostname.endsWith('.' + kbDomain)) {
+          return entry;
+        }
       }
     }
   }
@@ -664,7 +706,7 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
   };
 
   // ── STEP 1: Knowledge Base lookup (highest priority) ──
-  const kbEntry = lookupKnowledgeBase(hostname);
+  const kbEntry = lookupKnowledgeBase(hostname, metadata.url);
   if (kbEntry) {
     if (kbEntry.category === 'ai') result.isAI = true;
     else if (kbEntry.category === 'agency') {
@@ -724,8 +766,8 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
     result.reasons.push('Known useful platform domain');
   }
 
-  // ── STEP 4: .ai TLD with corroboration ──
-  const isAiTld = hostname.endsWith('.ai') || hostname.includes('.ai.');
+  // ── STEP 4: AI-centric TLD with corroboration ──
+  const isAiTld = hostname.endsWith('.ai') || hostname.endsWith('.bot') || hostname.endsWith('.chat') || hostname.endsWith('.agent') || hostname.includes('.ai.') || hostname.includes('.bot.') || hostname.includes('.chat.') || hostname.includes('.agent.');
   if (isAiTld && !result.isAI && !result.isAgency) {
     const aiCorroboration = /\bai\b/.test(text) ||
       text.includes('artificial intelligence') ||
@@ -744,7 +786,7 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
       result.isAI = true;
       result.confidence = Math.max(result.confidence, 0.88);
       result.label = 'AI Tool';
-      result.reasons.push('.ai domain with AI content corroboration');
+      result.reasons.push('AI-centric TLD (.ai/.bot/.chat/.agent) with content corroboration');
     }
   }
 
@@ -808,7 +850,7 @@ function sendPageData() {
   ], (result) => {
     const metadata = extractPageMetadata();
     const hostname = getHostname(metadata.url);
-    const isKbMatch = lookupKnowledgeBase(hostname) !== null;
+    const isKbMatch = lookupKnowledgeBase(hostname, metadata.url) !== null;
 
     if (!isKbMatch && isAuthenticationOrSystemPage(metadata, result.remoteAuthGateways)) {
       console.log('[AI Site Collector] Skipping: authentication page detected.');
