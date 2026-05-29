@@ -412,6 +412,8 @@ const WEIGHTED_AI_KEYWORDS = [
   { term: 'ai assistant',     weight: 8  },
   { term: 'language model',   weight: 8  },
   { term: 'image generation', weight: 8  },
+  { term: 'autonomous',       weight: 8  },
+  { term: 'agent',            weight: 8  },
   { term: 'ai tool',          weight: 6  },
   { term: 'ai platform',      weight: 6  },
   { term: 'generative',       weight: 6  },
@@ -424,10 +426,13 @@ const WEIGHTED_AI_KEYWORDS = [
   { term: 'anthropic',        weight: 5  },
   { term: 'artificial intelligence', weight: 5 },
   { term: 'diffusion model',  weight: 5  },
+  { term: 'chat',             weight: 5  },
   { term: 'transformer',      weight: 4  },
   { term: 'fine-tuning',      weight: 4  },
+  { term: 'workflow',         weight: 4  },
   { term: 'embedding',        weight: 3  },
   { term: 'inference',        weight: 3  },
+  { term: 'sandbox',          weight: 3  },
   { term: 'prompt',           weight: 2  },
   { term: 'ai',               weight: 1  }  // very common â€“ needs to combine with others
 ];
@@ -637,7 +642,15 @@ function scoreText(text, weightedList) {
  */
 function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remoteAiDomains) {
   const hostname = getHostname(metadata.url);
-  const text = (metadata.title + ' ' + (metadata.description || '')).toLowerCase();
+  
+  let pathClean = '';
+  try {
+    const urlObj = new URL(metadata.url);
+    pathClean = urlObj.pathname.toLowerCase().replace(/[\/\-\_\.]/g, ' ');
+  } catch { /* ignore URL parsing errors */ }
+  const hostClean = hostname.replace(/[\.\-\_]/g, ' ');
+
+  const text = (metadata.title + ' ' + (metadata.description || '') + ' ' + hostClean + ' ' + pathClean).toLowerCase();
 
   const result = {
     isAI: false,
@@ -669,7 +682,7 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
   // ── DYNAMIC DESCRIPTION/TITLE SHORTCUT TRIGGERS (Kimi/Manus direct catchers) ──
   const descLower = (metadata.description || '').toLowerCase();
   const titleLower = (metadata.title || '').toLowerCase();
-  const combineText = titleLower + ' ' + descLower;
+  const combineText = (titleLower + ' ' + descLower + ' ' + hostClean + ' ' + pathClean).trim();
 
   const hasDirectAiKeyword = 
     /\bai\b/i.test(combineText) || 
