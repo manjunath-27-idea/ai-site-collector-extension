@@ -29,6 +29,7 @@ const popupSignedIn = document.getElementById('popupSignedIn');
 const popupSignInBtn = document.getElementById('popupSignInBtn');
 const popupProfileAvatar = document.getElementById('popupProfileAvatar');
 const popupUserEmailDisplay = document.getElementById('popupUserEmailDisplay');
+const popupVersionBadge = document.getElementById('popupVersionBadge');
 const popupLogoutBtn = document.getElementById('popupLogoutBtn');
 const popupSyncBtn = document.getElementById('popupSyncBtn');
 const syncStatus = document.getElementById('syncStatus');
@@ -168,6 +169,9 @@ function checkAuthStatus() {
                 const email = result.userEmail || 'Signed In';
                 popupUserEmailDisplay.textContent = email;
                 popupProfileAvatar.textContent = email.charAt(0).toUpperCase();
+                if (popupVersionBadge) {
+                    popupVersionBadge.textContent = 'v' + chrome.runtime.getManifest().version;
+                }
             }
             if (syncStatus) syncStatus.style.display = 'block';
         } else {

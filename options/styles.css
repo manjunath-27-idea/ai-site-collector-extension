@@ -1179,6 +1179,28 @@ body.light-theme .toggle-switch input:checked + .slider {
     display: block;
 }
 
+.profile-version {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--primary-light);
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 20px;
+    padding: 1px 7px;
+    letter-spacing: 0.3px;
+    width: fit-content;
+    margin-top: 1px;
+}
+
+body.light-theme .profile-version {
+    color: var(--primary);
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.2);
+}
+
 .logout-link {
     background: none;
     border: none;

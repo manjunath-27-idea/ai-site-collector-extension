@@ -14,6 +14,7 @@ const sidebarSignInBtn = document.getElementById('sidebarSignInBtn');
 const sidebarSignInPromoBtn = document.getElementById('sidebarSignInPromoBtn');
 const profileAvatar = document.getElementById('profileAvatar');
 const userEmailDisplay = document.getElementById('userEmailDisplay');
+const optionsVersionBadge = document.getElementById('optionsVersionBadge');
 const sidebarLogoutBtn = document.getElementById('sidebarLogoutBtn');
 const sidebarSyncBtn = document.getElementById('sidebarSyncBtn');
 const syncStatus = document.getElementById('syncStatus');
@@ -123,6 +124,9 @@ function checkAuthStatus() {
             const email = result.userEmail || 'Signed In';
             userEmailDisplay.textContent = email;
             profileAvatar.textContent = email.charAt(0).toUpperCase();
+            if (optionsVersionBadge) {
+                optionsVersionBadge.textContent = 'v' + chrome.runtime.getManifest().version;
+            }
 
             // Display cloud settings, hide promo setup card
             driveSyncCard.style.display = 'block';
