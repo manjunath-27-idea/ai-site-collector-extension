@@ -4,24 +4,43 @@
  * Single document mode: All sites appended to one selected document
  */
 
-// Initialize storage
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({
-    sites: [],
-    driveDocId: null,
-    driveDocName: null,
-    isAuthenticated: false,
-    lastSync: null,
-    autoSyncSetting: true,
-    notificationsSetting: true,
-    darkModeSetting: false,
-    remoteAiDomains: ['openai.com', 'chatgpt.com', 'claude.ai', 'anthropic.com', 'huggingface.co', 'midjourney.com', 'replicate.com', 'perplexity.ai', 'gemini.google.com', 'cohere.com', 'stability.ai', 'deepseek.com', 'sora.com'],
-    remoteUsefulDomains: ['github.com', 'stackoverflow.com', 'npmjs.com', 'figma.com', 'canva.com', 'notion.so', 'trello.com', 'react.dev', 'mdn.mozilla.org', 'w3schools.com', 'stackblitz.com', 'codepen.io'],
-    remoteAuthGateways: ['accounts.google.com', 'login.microsoftonline.com', 'okta.com', 'auth0.com', 'clerk.com', 'cognito', 'keycloak']
-  }, () => {
-    // Attempt an initial dynamic sync immediately on installation
-    syncDomainRules();
-  });
+// Initialize storage — only reset user preferences on fresh install, never on reload/update
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    // ── First-install: write all defaults including user preference toggles ──
+    chrome.storage.local.set({
+      sites: [],
+      driveDocId: null,
+      driveDocName: null,
+      isAuthenticated: false,
+      lastSync: null,
+      autoSyncSetting: true,       // user preference — only set on first install
+      notificationsSetting: true,  // user preference — only set on first install
+      darkModeSetting: false,      // user preference — only set on first install
+      remoteAiDomains: ['openai.com', 'chatgpt.com', 'claude.ai', 'anthropic.com', 'huggingface.co', 'midjourney.com', 'replicate.com', 'perplexity.ai', 'gemini.google.com', 'cohere.com', 'stability.ai', 'deepseek.com', 'sora.com'],
+      remoteUsefulDomains: ['github.com', 'stackoverflow.com', 'npmjs.com', 'figma.com', 'canva.com', 'notion.so', 'trello.com', 'react.dev', 'mdn.mozilla.org', 'w3schools.com', 'stackblitz.com', 'codepen.io'],
+      remoteAuthGateways: ['accounts.google.com', 'login.microsoftonline.com', 'okta.com', 'auth0.com', 'clerk.com', 'cognito', 'keycloak']
+    }, () => {
+      syncDomainRules();
+    });
+  } else {
+    // ── Extension update / reload: only refresh domain lists; NEVER touch user preferences ──
+    // Use get+set pattern so existing user toggles (autoSync, notifications, darkMode) are preserved.
+    chrome.storage.local.get(['autoSyncSetting', 'notificationsSetting', 'darkModeSetting'], (prefs) => {
+      chrome.storage.local.set({
+        // Restore only the domain infrastructure — do NOT overwrite user prefs
+        remoteAiDomains: ['openai.com', 'chatgpt.com', 'claude.ai', 'anthropic.com', 'huggingface.co', 'midjourney.com', 'replicate.com', 'perplexity.ai', 'gemini.google.com', 'cohere.com', 'stability.ai', 'deepseek.com', 'sora.com'],
+        remoteUsefulDomains: ['github.com', 'stackoverflow.com', 'npmjs.com', 'figma.com', 'canva.com', 'notion.so', 'trello.com', 'react.dev', 'mdn.mozilla.org', 'w3schools.com', 'stackblitz.com', 'codepen.io'],
+        remoteAuthGateways: ['accounts.google.com', 'login.microsoftonline.com', 'okta.com', 'auth0.com', 'clerk.com', 'cognito', 'keycloak'],
+        // Write back user prefs only if they were undefined (first time after migration)
+        autoSyncSetting:      prefs.autoSyncSetting      !== undefined ? prefs.autoSyncSetting      : true,
+        notificationsSetting: prefs.notificationsSetting !== undefined ? prefs.notificationsSetting : true,
+        darkModeSetting:      prefs.darkModeSetting       !== undefined ? prefs.darkModeSetting       : false,
+      }, () => {
+        syncDomainRules();
+      });
+    });
+  }
 });
 
 /**
