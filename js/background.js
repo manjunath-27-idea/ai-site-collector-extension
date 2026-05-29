@@ -491,9 +491,19 @@ function generateDocumentContent(sites) {
 async function appendToDocument(token, docId, sites) {
   try {
     // Get current document content
-    const getResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${docId}?alt=media`, {
+    let getResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${docId}?alt=media`, {
       headers: { Authorization: 'Bearer ' + token }
     });
+
+    // Self-healing: if the cached docId returns 404 (file deleted or invalid), re-create it dynamically
+    if (getResponse.status === 404) {
+      console.log('[Drive Sync] Stored document ID returned 404. Auto-recreating sync database...');
+      const newDocId = await getOrCreateDefaultDoc(token);
+      getResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${newDocId}?alt=media`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      docId = newDocId; // Update docId reference
+    }
 
     if (!getResponse.ok) {
       throw new Error(`Failed to read Drive document: ${getResponse.statusText}`);
