@@ -24,19 +24,26 @@ chrome.runtime.onInstalled.addListener((details) => {
       syncDomainRules();
     });
   } else {
-    // ── Extension update / reload: only refresh domain lists; NEVER touch user preferences ──
-    // Use get+set pattern so existing user toggles (autoSync, notifications, darkMode) are preserved.
-    chrome.storage.local.get(['autoSyncSetting', 'notificationsSetting', 'darkModeSetting'], (prefs) => {
-      chrome.storage.local.set({
-        // Restore only the domain infrastructure — do NOT overwrite user prefs
+    // ── Extension update / reload ──
+    // 1. One-time migration: strip any stale .txt suffix from driveDocName in storage
+    chrome.storage.local.get(['autoSyncSetting', 'notificationsSetting', 'darkModeSetting', 'driveDocName'], (stored) => {
+      const updates = {
         remoteAiDomains: ['openai.com', 'chatgpt.com', 'claude.ai', 'anthropic.com', 'huggingface.co', 'midjourney.com', 'replicate.com', 'perplexity.ai', 'gemini.google.com', 'cohere.com', 'stability.ai', 'deepseek.com', 'sora.com'],
         remoteUsefulDomains: ['github.com', 'stackoverflow.com', 'npmjs.com', 'figma.com', 'canva.com', 'notion.so', 'trello.com', 'react.dev', 'mdn.mozilla.org', 'w3schools.com', 'stackblitz.com', 'codepen.io'],
         remoteAuthGateways: ['accounts.google.com', 'login.microsoftonline.com', 'okta.com', 'auth0.com', 'clerk.com', 'cognito', 'keycloak'],
-        // Write back user prefs only if they were undefined (first time after migration)
-        autoSyncSetting:      prefs.autoSyncSetting      !== undefined ? prefs.autoSyncSetting      : true,
-        notificationsSetting: prefs.notificationsSetting !== undefined ? prefs.notificationsSetting : true,
-        darkModeSetting:      prefs.darkModeSetting       !== undefined ? prefs.darkModeSetting       : false,
-      }, () => {
+        // Preserve user preferences — never reset on update
+        autoSyncSetting:      stored.autoSyncSetting      !== undefined ? stored.autoSyncSetting      : true,
+        notificationsSetting: stored.notificationsSetting !== undefined ? stored.notificationsSetting : true,
+        darkModeSetting:      stored.darkModeSetting       !== undefined ? stored.darkModeSetting       : false,
+      };
+
+      // ── Migration: clean stale .txt from driveDocName ──
+      if (stored.driveDocName && /\.txt$/i.test(stored.driveDocName)) {
+        updates.driveDocName = stored.driveDocName.replace(/\.txt$/i, '').trim();
+        console.log('[Migration] Cleaned stale driveDocName:', stored.driveDocName, '→', updates.driveDocName);
+      }
+
+      chrome.storage.local.set(updates, () => {
         syncDomainRules();
       });
     });
