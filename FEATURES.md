@@ -7,20 +7,19 @@
 The extension uses a sophisticated multi-factor analysis to identify AI and useful websites:
 
 **AI Website Detection:**
-- Recognizes known AI platforms (OpenAI, Anthropic, Hugging Face, Midjourney, etc.)
-- Detects AI-related keywords in page content
-- Analyzes domain patterns and metadata
-- Provides confidence scores (0-100%)
+- **Dynamic Path-Level Lookup:** Matches specific tool sub-paths on major hostnames (e.g. `copilot.github.com`, `github.com/features/copilot`, `aws.amazon.com/q`, `codeium.com/windsurf`) fixing the legacy hostname-only matching limitation.
+- **AI-Centric TLD Detections:** Automatically scans and corroborates contemporary AI-specific extensions: `.ai`, `.bot`, `.chat`, and `.agent`.
+- **Integrated URL Context Parsing:** Domain names and URL path parameters are cleaned and included in the classifier's text corpus.
+- **Direct AI Catcher:** Immediately captures pages containing `ai`, `agent`, `artificial intelligence`, or `agentic` in dynamic URL strings or headers.
+- **Confidence Scoring:** Fully weighted heuristics evaluate site headers and URLs, generating scores and robust tags.
 
 **Useful Website Detection:**
-- Identifies productivity tools and frameworks
-- Recognizes development resources and documentation
-- Detects design tools and analytics platforms
-- Finds APIs and software solutions
+- **Cybersecurity & Pentesting Fallbacks:** Added weighted cybersecurity keywords (`pentest`, `pentesting`, `penetration testing`, `security scanner`, `vulnerability`) to capture developer-centric testing platforms.
+- **Productivity & Resource Profiling:** Identifies frameworks, library docs, developer tools, and software solutions.
 
 **Confidence Scoring:**
-- High (80-100%): Strong indicators of AI/useful site
-- Medium (50-80%): Some relevant keywords/patterns found
+- High (80-100%): Strong indicators of AI/useful site (or verified KB entries)
+- Medium (50-80%): Some relevant keywords/patterns found in metadata or URL path
 - Low (<50%): Possible match but uncertain
 
 ### 📊 Widescreen Options Dashboard Website UI
@@ -35,6 +34,7 @@ A fullscreen dashboard interface opened via `chrome.runtime.openOptionsPage()` t
 
 **Hands-Free Cloud Sync:**
 - One-click manual or background auto-sync to backup your collection.
+- **Robust Self-Healing OAuth Token Refresh Pipeline:** Intercepts `401 Unauthorized` responses from expired user tokens (tokens naturally expire every 1 hour), silently clears the stale token cache via `chrome.identity.removeCachedAuthToken`, requests a fresh token, and automatically retries the synchronization transparently without user intervention.
 - Auto-discovers and reconnects to the extensionless document **`AI_Site_Collector_Database`** or auto-creates it on first sync.
 - Strict security boundary validation that refuses to write or list any file other than `AI_Site_Collector_Database` to block traversal attacks.
 - Standard **Option 2 Clean Markdown (.md)** sync format (emoji-free, spaced headings, bulleted lists, and clickable raw URLs).
