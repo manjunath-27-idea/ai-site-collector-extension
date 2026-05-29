@@ -46,12 +46,41 @@ const usefulKeywordsTags = document.getElementById('usefulKeywordsTags');
 
 // Initialize
 function init() {
+    selfHealSitesDescription();
     loadSites();
     setupEventListeners();
     checkAuthStatus();
     loadSelectedDocument();
     loadSettings();
     loadCustomKeywords();
+}
+
+/**
+ * Self-healing background migration: Clean broken em-dashes from already collected site descriptions
+ */
+function selfHealSitesDescription() {
+    chrome.storage.local.get('sites', (result) => {
+        const list = result.sites || [];
+        let modified = false;
+        
+        const cleanedList = list.map(site => {
+            if (site.description && (site.description.includes('â€”') || site.description.includes('—'))) {
+                let d = site.description;
+                d = d.replace(/â€”/g, ' - ');
+                d = d.replace(/—/g, ' - ');
+                modified = true;
+                return { ...site, description: d };
+            }
+            return site;
+        });
+
+        if (modified) {
+            chrome.storage.local.set({ sites: cleanedList }, () => {
+                console.log('[Self-Heal] Stored site descriptions cleaned of broken encoding symbols.');
+                loadSites();
+            });
+        }
+    });
 }
 
 if (document.readyState === 'loading') {
