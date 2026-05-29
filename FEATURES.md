@@ -34,18 +34,18 @@ A fullscreen dashboard interface opened via `chrome.runtime.openOptionsPage()` t
 ### 💾 Google Drive Integration
 
 **Hands-Free Cloud Sync:**
-- One-click sync and fully automated cloud connection.
-- Auto-discovers and reconnects to `AI_Site_Collector_Database.txt` or auto-creates it on first sync.
-- Strict security boundary validation that refuses to write or list any file other than `AI_Site_Collector_Database.txt`.
-- Structured text append format for persistent historical collection (no database loss).
+- One-click manual or background auto-sync to backup your collection.
+- Auto-discovers and reconnects to the extensionless document **`AI_Site_Collector_Database`** or auto-creates it on first sync.
+- Strict security boundary validation that refuses to write or list any file other than `AI_Site_Collector_Database` to block traversal attacks.
+- Standard **Option 2 Clean Markdown (.md)** sync format (emoji-free, spaced headings, bulleted lists, and clickable raw URLs).
 
-**Database Schema Format:**
-- Title: Clean base platform name (for AI sites) or full title.
-- URL: Root domain homepage origin (for AI sites) or full subpage link.
-- Description: Structured classification or page summary.
-- Type: AI or Useful classification.
-- Confidence: Metric value.
-- Saved At: Timestamp.
+**Markdown Database Document Schema:**
+- **Title Header:** `### [Platform/Website Name]`
+- **URL Property:** Raw clickable website URL only (e.g. `* **URL:** https://manus.im/`).
+- **Type Category:** Classifications mapped cleanly as `AI Platform` or `Useful Tool`.
+- **Description:** Prioritizes live instantly scraped page description over static fallback summaries.
+- **Features List:** Dynamic tags deep-scanned from live metadata (e.g., `agent, chatbot, workflows, coding`).
+- **Deduplication Filter:** Evaluates file content and skips writing any sites whose URLs are already stored.
 
 ### 🎨 Premium UI Design
 

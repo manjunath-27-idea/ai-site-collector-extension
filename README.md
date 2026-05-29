@@ -19,9 +19,10 @@ A premium-styled Chrome extension that automatically detects and saves AI and us
 - Custom keywords tags list manager (CRUD) to customize background scanners.
 
 💾 **Hands-Free Google Drive Sync**
-- **Automated Discovery & Reconnection:** Automatically searches your Drive for `AI_Site_Collector_Database.txt` or creates a new one with secure headers if missing.
-- **Strict Security Filename Sandbox:** Validates file names at listing, selection, and sync boundaries. Refuses to accept, list, or write to any file other than the exact filename `AI_Site_Collector_Database.txt` to block traversal attacks.
-- **Historical Data Integrity:** All synced data is appended to this single file, leaving previous collection records constant, unchanged, and intact.
+- **Automated Discovery & Reconnection:** Automatically searches your Drive for `AI_Site_Collector_Database` or creates a new one with secure headers if missing.
+- **Strict Security Filename Sandbox:** Validates file names at listing, selection, and sync boundaries. Refuses to accept, list, or write to any file other than the exact filename `AI_Site_Collector_Database` to block traversal attacks.
+- **Option 2 Markdown Format:** Synced in a clean, emoji-free, readable Markdown document format (.md) with clickable raw URLs and spaced lists.
+- **Deduplicated Appends:** All synced data is filtered by URL against current document content, keeping your collection perfectly unique and duplicate-free.
 - **One-click authentication** with Google OAuth.
 
 🎨 **Premium UI Design**
@@ -122,24 +123,17 @@ ai-site-collector-ext/
 
 ## How It Works
 
-### Detection Algorithm
-The extension uses a multi-factor analysis:
+### Architectural Flow
 
-1. **Domain Matching**: Checks against a database of known AI platforms
-2. **Keyword Analysis**: Scans page title, description, and metadata for AI/useful keywords
-3. **Confidence Scoring**: Combines multiple signals into a confidence percentage
-4. **Duplicate Prevention**: Avoids saving the same site twice
+The extension operates in four fully integrated phases:
 
-### Data Storage
-- **Local Storage**: Sites are cached locally in Chrome storage.
-- **Google Drive**: Synced data is stored securely as a structured text database file for easy read-append operations.
-- **Privacy**: No data is sent to third-party servers.
-
-### Google Drive Integration
-- Uses OAuth 2.0 for secure authentication.
-- Automatically searches, reconnects, or creates the targeted database file in your Drive root directory.
-- The file is strictly locked down to the exact name: `AI_Site_Collector_Database.txt`.
-- Automatically appends new records incrementally, keeping historical data completely constant.
+1. **Extraction (`js/content.js`):** Injected on DOM load. Extracts titles, urls, favicons, meta keywords, and prioritizes the **live scraped description** of the page instantly. Securely guards metadata query selectors to avoid page parser crashes.
+2. **Classification (`js/content.js`):** 
+   - **Knowledge Base (STEP 1):** Zero-latency matching against verified AI tools and agents (e.g. ChatGPT, Claude, Kimi AI, Manus). Direct matches bypass authentication page filters to guarantee invite/login screen saves.
+   - **AI/Agent Keyword Catcher (STEP 2):** Immediately classifies any pages containing `ai`, `agent`, `artificial intelligence`, `artificial intelligent`, or `agentic` in title or live description, setting categories as AI with `0.85` confidence.
+   - **Fallback Weighted Scoring:** Scores page elements against a keyword list. Discards authentication or system-only interfaces (like password resets) unless pre-verified in the KB. Cleans chat subpages to root origins.
+3. **Storage & Multi-Page Syncing:** Upgrades local collection items in `chrome.storage.local` if later visits extract a richer description or new tags. Propagates all state changes instantly across Options Dashboard and Popup UI using `chrome.storage.onChanged` reactions.
+4. **Google Drive Syncing (`js/background.js`):** Incrementally appends new sites to the extensionless document **`AI_Site_Collector_Database`**. Cleans and sanitizes legacy `.txt` cached properties from local storage. Syncs in standard **Option 2 Clean Markdown (.md) format** (emoji-free, bulleted lists, clickable raw URLs only, no confidence or timestamp clutter).
 
 ## Detected AI Keywords
 - AI, Artificial Intelligence, Machine Learning, Deep Learning
