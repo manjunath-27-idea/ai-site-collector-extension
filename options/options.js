@@ -516,7 +516,12 @@ function deleteSingleSite(siteId) {
 function loadSelectedDocument() {
     chrome.runtime.sendMessage({ action: 'getDriveDocument' }, (response) => {
         if (response.docId && response.docName) {
-            docNameDisplay.textContent = `📄 ${response.docName}`;
+            let docName = response.docName;
+            if (docName.endsWith('.txt')) {
+                docName = docName.substring(0, docName.length - 4);
+                chrome.storage.local.set({ driveDocName: docName });
+            }
+            docNameDisplay.textContent = `📄 ${docName}`;
         } else {
             docNameDisplay.textContent = 'No document selected';
         }
