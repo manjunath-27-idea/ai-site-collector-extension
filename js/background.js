@@ -532,23 +532,41 @@ function generateDocumentContent(sites) {
  * Reads existing content via Docs API export, deduplicates by URL, then appends.
  */
 async function appendToDocument(token, docId, sites) {
+  const GDOC_MIME = 'application/vnd.google-apps.document';
+  let isDocValid = false;
+
+  // Verify that the stored docId is a valid, non-trashed Google Doc
+  if (docId) {
+    try {
+      const fileCheckResponse = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${docId}?fields=mimeType,trashed`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      
+      if (fileCheckResponse.ok) {
+        const fileMeta = await fileCheckResponse.json();
+        if (fileMeta.mimeType === GDOC_MIME && !fileMeta.trashed) {
+          isDocValid = true;
+        }
+      }
+    } catch (err) {
+      console.log('[Drive Sync] Error verifying document metadata:', err);
+    }
+  }
+
+  // If the stored document is not valid, trashed, or not a Google Doc, recreate/rediscover one
+  if (!isDocValid) {
+    console.log('[Drive Sync] Stored document is invalid, trashed, or not a Google Doc. Recreating or auto-discovering...');
+    const newDocId = await getOrCreateDefaultDoc(token);
+    docId = newDocId;
+  }
+
   // ── Step 1: Read current Google Doc content to deduplicate ──
   // Use Drive export to get plain-text content for URL deduplication check
   let exportResponse = await fetch(
     `https://www.googleapis.com/drive/v3/files/${docId}/export?mimeType=text/plain`,
     { headers: { Authorization: 'Bearer ' + token } }
   );
-
-  // Self-healing: if the Google Doc was deleted, recreate it
-  if (exportResponse.status === 404) {
-    console.log('[Drive Sync] Google Doc not found (404). Recreating...');
-    const newDocId = await getOrCreateDefaultDoc(token);
-    exportResponse = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${newDocId}/export?mimeType=text/plain`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    docId = newDocId;
-  }
 
   if (!exportResponse.ok) {
     if (exportResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
