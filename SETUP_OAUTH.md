@@ -1,108 +1,141 @@
 # Google OAuth Setup Guide
 
 This guide walks you through setting up Google OAuth 2.0 for the AI Site Collector extension.
+The extension requires both **Google Drive API** and **Google Docs API** to be enabled.
+
+---
 
 ## Step 1: Create a Google Cloud Project
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Click on the project dropdown at the top
-3. Click "NEW PROJECT"
-4. Enter project name: `AI Site Collector`
-5. Click "CREATE"
-6. Wait for the project to be created
+2. Click the project dropdown at the top → **NEW PROJECT**
+3. Project name: `AI Site Collector`
+4. Click **CREATE** and wait for it to be ready
 
-## Step 2: Enable Google Drive API
+---
 
-1. In the Cloud Console, search for "Google Drive API"
-2. Click on "Google Drive API"
-3. Click "ENABLE"
-4. Wait for it to enable
+## Step 2: Enable Required APIs
 
-## Step 3: Create OAuth 2.0 Credentials
+You need **both** APIs enabled:
 
-1. Go to "Credentials" in the left sidebar
-2. Click "CREATE CREDENTIALS"
-3. Select "OAuth client ID"
-4. If prompted, click "CONFIGURE CONSENT SCREEN" first:
-   - Choose "External" user type
-   - Fill in the form:
-     - App name: `AI Site Collector`
-     - User support email: Your email
-     - Developer contact: Your email
-   - Click "SAVE AND CONTINUE"
-   - Skip scopes (click "SAVE AND CONTINUE")
-   - Review and click "BACK TO DASHBOARD"
+1. In Cloud Console, go to **APIs & Services → Library**
+2. Search for and enable **Google Drive API** → click **ENABLE**
+3. Search for and enable **Google Docs API** → click **ENABLE**
 
-5. Now create the OAuth client ID:
-   - Click "CREATE CREDENTIALS" → "OAuth client ID"
-   - Application type: **Chrome App**
-   - Name: `AI Site Collector`
-   - Click "CREATE"
+> The extension uses Google Drive API to find/create the document and Google Docs API to write content to it.
 
-## Step 4: Get Your Client ID
+---
 
-1. After creation, you'll see your credentials
-2. Copy the **Client ID** (it looks like: `xxxxx-xxxxx.apps.googleusercontent.com`)
+## Step 3: Configure OAuth Consent Screen
 
-## Step 5: Update the Extension
+1. Go to **APIs & Services → OAuth consent screen**
+2. Choose **External** → click **CREATE**
+3. Fill in:
+   - **App name:** `AI Site Collector`
+   - **User support email:** your email
+   - **Developer contact:** your email
+4. Click **SAVE AND CONTINUE** through all steps
+5. Return to the Dashboard
 
-1. Open `manifest.json` in the extension folder
-2. Find this line:
-   ```json
-   "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
-   ```
-3. Replace `YOUR_CLIENT_ID` with your actual Client ID
-4. Save the file
+---
+
+## Step 4: Create OAuth 2.0 Credentials
+
+1. Go to **APIs & Services → Credentials**
+2. Click **CREATE CREDENTIALS → OAuth client ID**
+3. **Application type:** Chrome App
+4. **Name:** `AI Site Collector`
+5. Click **CREATE**
+6. Copy the **Client ID** (format: `xxxx-xxxx.apps.googleusercontent.com`)
+
+---
+
+## Step 5: Update `manifest.json`
+
+Open `manifest.json` in the extension folder and replace `YOUR_CLIENT_ID`:
+
+```json
+"oauth2": {
+  "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+  "scopes": [
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/documents"
+  ]
+}
+```
+
+> **Important:** Both scopes are required:
+> - `drive.file` — to search/create the Google Doc in Drive
+> - `documents` — to write content to the Google Doc via Docs API
+
+---
 
 ## Step 6: Load the Extension
 
-1. Open Chrome and go to `chrome://extensions/`
-2. Turn on "Developer mode" (top right toggle)
-3. Click "Load unpacked"
-4. Select the `ai-site-collector-ext` folder
-5. The extension should now appear in your extensions list
+1. Open Chrome → go to `chrome://extensions/`
+2. Enable **Developer mode** (top right)
+3. Click **Load unpacked** → select the extension folder
+4. Extension appears in the toolbar
 
-## Step 7: Test Authentication
+---
 
-1. Click the extension icon in Chrome
-2. Click "Sign in with Google"
-3. A Google login window will appear
+## Step 7: Sign In & Test
+
+1. Click the extension icon
+2. Click **Sign in with Google**
+3. Google login window appears
 4. Sign in with your Google account
-5. Grant the requested permissions
-6. You should see "Authenticated as [your-email]"
+5. Grant all requested permissions
+6. You should see your email in the popup — you're authenticated!
+
+---
+
+## How Google Doc Sync Works
+
+On first sync, the extension:
+1. Searches your Drive for a Google Doc named `AI_Site_Collector_Database`
+2. If found → reuses it and appends new sites
+3. If not found → creates a new Google Doc with that name automatically
+4. Saves the document ID to local storage for all future syncs
+
+The document is a **native Google Doc** (not a `.txt` file) — it opens beautifully in Google Docs.
+
+---
 
 ## Troubleshooting
 
-### "Invalid Client ID" Error
-- Double-check that you copied the Client ID correctly
-- Make sure it includes the `.apps.googleusercontent.com` part
-- Reload the extension after updating
+| Error | Solution |
+|---|---|
+| Invalid Client ID | Double-check you copied the full ID including `.apps.googleusercontent.com` |
+| Permission denied | Ensure both Google Drive API and Google Docs API are enabled |
+| Sync failed | Re-authenticate; check if both API scopes are in `manifest.json` |
+| Doc not found in Drive | Extension will auto-create it on next sync |
+| Token expired | Extension silently refreshes OAuth token automatically |
+| Extension not loading | Verify all files are present; reload at `chrome://extensions/` |
 
-### "Permission Denied" Error
-- Make sure you enabled the Google Drive API
-- Check that your OAuth credentials are set to "Chrome App" type
-- Try signing out and back in
+---
 
-### Extension Not Loading
-- Ensure the folder path is correct
-- Check that all required files are present
-- Try reloading the extension (refresh button on chrome://extensions/)
+## Required OAuth Scopes Explained
 
-### Can't Sign In
-- Make sure you're connected to the internet
-- Check your Google account security settings
-- Try clearing Chrome cache and cookies
-- Create a new OAuth credential if the old one seems broken
+| Scope | Why It's Needed |
+|---|---|
+| `drive.file` | Search Drive for existing `AI_Site_Collector_Database` doc; create it if missing |
+| `documents` | Write site data to the Google Doc using the Docs API `batchUpdate` endpoint |
+
+---
 
 ## Security Notes
 
-- Your Client ID is not sensitive (it's public)
-- The extension uses OAuth 2.0 for secure authentication
-- Your Google Drive files are only accessible by you
-- The extension never stores your password
+- Your **Client ID is public** — it's safe to include in `manifest.json`
+- The extension uses OAuth 2.0 — your Google password is never seen or stored
+- Token management is handled by Chrome's `chrome.identity` API
+- Only the `AI_Site_Collector_Database` Google Doc is ever read or written to
 
-## Need More Help?
+---
 
-- [Google OAuth Documentation](https://developers.google.com/identity/protocols/oauth2)
-- [Chrome Extension Development Guide](https://developer.chrome.com/docs/extensions/)
-- [Google Drive API Documentation](https://developers.google.com/drive/api)
+## External Resources
+
+- [Google Drive API Docs](https://developers.google.com/drive/api)
+- [Google Docs API Docs](https://developers.google.com/docs/api)
+- [Chrome Identity API](https://developer.chrome.com/docs/extensions/reference/identity/)
+- [OAuth 2.0 for Chrome Extensions](https://developer.chrome.com/docs/extensions/mv3/oauth/)

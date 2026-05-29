@@ -1,47 +1,65 @@
-# AI Site Collector - Quick Start Guide
+# AI Site Collector — Quick Start Guide
 
-## 30-Second Setup
+## Setup in 4 Steps
 
-1. **Get Google OAuth Credentials**
-   - Visit: https://console.cloud.google.com/
-   - Create new project → Enable Google Drive API
-   - Create OAuth 2.0 credentials (Chrome app)
-   - Copy your Client ID
+### 1. Get Google OAuth Credentials
+- Go to [Google Cloud Console](https://console.cloud.google.com/)
+- Create a new project → Enable **Google Drive API** and **Google Docs API**
+- Create OAuth 2.0 credentials → Application type: **Chrome App**
+- Copy your **Client ID** (format: `xxxx.apps.googleusercontent.com`)
 
-2. **Update Extension**
-   - Open `manifest.json`
-   - Replace `YOUR_CLIENT_ID` with your actual Client ID
+### 2. Update `manifest.json`
+```json
+"oauth2": {
+  "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+  "scopes": [
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/documents"
+  ]
+}
+```
 
-3. **Load in Chrome**
-   - Go to `chrome://extensions/`
-   - Turn on "Developer mode"
-   - Click "Load unpacked"
-   - Select the extension folder
+### 3. Load in Chrome
+- Go to `chrome://extensions/`
+- Enable **Developer mode** (top right)
+- Click **Load unpacked** → select the extension folder
 
-4. **Sign In**
-   - Click extension icon
-   - Click "Sign in with Google"
-   - Grant permissions
+### 4. Sign In
+- Click the extension icon in the toolbar
+- Click **Sign in with Google**
+- Grant Drive and Docs permissions
 
-## You're Done! 🎉
+---
 
-The extension will now:
-- ✅ Automatically detect AI and useful websites as you browse
-- ✅ Display them in the popup with descriptions
-- ✅ Let you sync to Google Drive with one click
-- ✅ Open Widescreen Dashboard for full search and keyword management
+## You're Ready! 🎉
+
+The extension now:
+- ✅ Automatically detects AI and useful websites as you browse
+- ✅ Shows them in the popup with descriptions, type badges, and confidence scores
+- ✅ Auto-syncs new sites to your **Google Doc** (`AI_Site_Collector_Database`)
+- ✅ Sends desktop notifications when a site is saved
+- ✅ Opens a full **Widescreen Dashboard** for search, filtering, and keyword management
+
+---
 
 ## First Steps
 
-1. **Browse some websites** - Visit AI platforms or useful tools
-2. **Check the popup** - Click the extension icon to see collected sites
-3. **Sync to Drive** - Click "Sync to Drive" to save to Google Drive
-4. **Open Widescreen Dashboard** - Click the grid dashboard icon in the popup header to manage, search, delete, and add custom scanner keywords in a fullscreen workspace tab!
+1. **Browse AI sites** — Visit `chatgpt.com`, `claude.ai`, `cursor.sh`, etc.
+2. **Check the popup** — Click the extension icon to see detected sites
+3. **Open the Dashboard** — Click the grid icon in the popup header for full management
+4. **Add custom keywords** — Under Settings → add keywords like `langchain`, `n8n`, `zapier`
+5. **Check Google Drive** — Open Drive and find `AI_Site_Collector_Database` (Google Doc)
+
+---
 
 ## Need Help?
 
-- See `README.md` for detailed documentation
-- Check troubleshooting section if something doesn't work
-- Ensure all permissions are granted in the popup
+- `README.md` — Full documentation and feature overview
+- `FEATURES.md` — Detailed feature and pipeline explanation
+- `SETUP_OAUTH.md` — Step-by-step Google OAuth configuration
+- `UPDATE_NOTES.md` — Version history and bug fixes
+- `INSTALLATION_CHECKLIST.md` — Verification checklist
+
+---
 
 Enjoy collecting! 🚀

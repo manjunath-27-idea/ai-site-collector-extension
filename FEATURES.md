@@ -1,242 +1,208 @@
-# AI Site Collector - Features Overview
+# AI Site Collector — Features Overview
 
-## Core Features
+## 🤖 Intelligent 5-Step Detection Pipeline
 
-### 🤖 Intelligent Website Detection
+Every page you visit is passed through a 5-step classifier inside `js/content.js`:
 
-The extension uses a sophisticated multi-factor analysis to identify AI and useful websites:
+### Step 1 — Static Knowledge Base (AI_KNOWLEDGE_BASE)
+A hand-curated list of 500+ verified AI tools, agents, and platforms embedded directly in `content.js`. Each entry has:
+- `domains[]` — all aliases for the platform (e.g. `['cursor.sh', 'cursor.com']`)
+- `name` — canonical display name
+- `category` — `'ai'` or `'useful'`
+- `description` — pre-written accurate description (shown in sync doc)
+- `tags[]` — feature labels (e.g. `['code', 'editor', 'llm']`)
 
-**AI Website Detection:**
-- **Dynamic Path-Level Lookup:** Matches specific tool sub-paths on major hostnames (e.g. `copilot.github.com`, `github.com/features/copilot`, `aws.amazon.com/q`, `codeium.com/windsurf`) fixing the legacy hostname-only matching limitation.
-- **AI-Centric TLD Detections:** Automatically scans and corroborates contemporary AI-specific extensions: `.ai`, `.bot`, `.chat`, and `.agent`.
-- **Integrated URL Context Parsing:** Domain names and URL path parameters are cleaned and included in the classifier's text corpus.
-- **Direct AI Catcher:** Immediately captures pages containing `ai`, `agent`, `artificial intelligence`, or `agentic` in dynamic URL strings or headers.
-- **Confidence Scoring:** Fully weighted heuristics evaluate site headers and URLs, generating scores and robust tags.
+Path-level entries are also supported for tools hosted on major platforms:
+- `github.com/features/copilot` → GitHub Copilot
+- `aws.amazon.com/q` → Amazon Q
+- `codeium.com/windsurf` → Windsurf
+- `emergent.sh` → Emergent AI *(dual brand name supported)*
 
-**Useful Website Detection:**
-- **Cybersecurity & Pentesting Fallbacks:** Added weighted cybersecurity keywords (`pentest`, `pentesting`, `penetration testing`, `security scanner`, `vulnerability`) to capture developer-centric testing platforms.
-- **Productivity & Resource Profiling:** Identifies frameworks, library docs, developer tools, and software solutions.
+### Step 2 — Dynamic Remote Domain Rules
+On install, update, and browser startup, `background.js` fetches `domain_rules.json` from GitHub and stores:
+- `remoteAiDomains` — dynamically whitelisted AI hostnames
+- `remoteUsefulDomains` — dynamically whitelisted developer tools
+- `remoteAuthGateways` — login/OAuth pages to skip
 
-**Confidence Scoring:**
-- High (80-100%): Strong indicators of AI/useful site (or verified KB entries)
-- Medium (50-80%): Some relevant keywords/patterns found in metadata or URL path
-- Low (<50%): Possible match but uncertain
+Input validation prevents XSS/prototype pollution: all entries are regex-screened and length-limited.
 
-### 📊 Widescreen Options Dashboard Website UI
+### Step 3 — AI-Centric TLD Corroboration
+Domains ending in `.ai`, `.bot`, `.chat`, or `.agent` receive a corroboration check against page content. If any of these appear in the text:
+`generative`, `llm`, `chatbot`, `machine learning`, `agentic`, `automate`, `pentest`, `cybersecurity`
+→ Site is classified as AI with `confidence: 0.80`.
 
-A fullscreen dashboard interface opened via `chrome.runtime.openOptionsPage()` that fits widescreen layouts elegantly:
-- **Responsive Multi-column Grid:** Shows your collected websites in interactive cards.
-- **Real-time Live Search:** Search bar to instantly filter collected sites by title, URL, or description.
-- **Category Filters:** Quick category buttons to filter between All, AI Sites, or Useful Sites.
-- **Individual Card Deletion:** Hovering over any card displays a quick Delete button (`×`) to dynamically remove that specific site from the database.
+### Step 4 — Weighted Keyword Scoring
+Full page text corpus (title + description + OG tags + URL path + meta keywords) is scored against:
 
-### 💾 Google Drive Integration
+**AI Keywords** (weighted):
+`ai`, `artificial intelligence`, `gpt`, `llm`, `chatbot`, `generative`, `agentic`, `autonomous`, `machine learning`, `neural`, `transformer`, `copilot`, `agent`, `workflow`, `model`, `deep learning`
 
-**Hands-Free Cloud Sync:**
-- One-click manual or background auto-sync to backup your collection.
-- **Robust Self-Healing OAuth Token Refresh Pipeline:** Intercepts `401 Unauthorized` responses from expired user tokens (tokens naturally expire every 1 hour), silently clears the stale token cache via `chrome.identity.removeCachedAuthToken`, requests a fresh token, and automatically retries the synchronization transparently without user intervention.
-- Auto-discovers and reconnects to the extensionless document **`AI_Site_Collector_Database`** or auto-creates it on first sync.
-- Strict security boundary validation that refuses to write or list any file other than `AI_Site_Collector_Database` to block traversal attacks.
-- Standard **Option 2 Clean Markdown (.md)** sync format (emoji-free, spaced headings, bulleted lists, and clickable raw URLs).
+**Useful Keywords** (weighted):
+`developer tool`, `open source`, `framework`, `library`, `documentation`, `pentest`, `pentesting`, `penetration testing`, `security scanner`, `vulnerability`, `cybersecurity`, `productivity`, `automation`
 
-**Markdown Database Document Schema:**
-- **Title Header:** `### [Platform/Website Name]`
-- **URL Property:** Raw clickable website URL only (e.g. `* **URL:** https://manus.im/`).
-- **Type Category:** Classifications mapped cleanly as `AI Platform` or `Useful Tool`.
-- **Description:** Prioritizes live instantly scraped page description over static fallback summaries.
-- **Features List:** Dynamic tags deep-scanned from live metadata (e.g., `agent, chatbot, workflows, coding`).
-- **Deduplication Filter:** Evaluates file content and skips writing any sites whose URLs are already stored.
+Scores above threshold → classified with confidence `0.65–0.90`.
 
-### 🎨 Premium UI Design
+### Step 5 — Auth Page Filter
+Any URL or page matching login patterns (`/login`, `/auth`, `/signin`, `/oauth`, `/register`) or known auth gateways (`accounts.google.com`, `okta.com`, `auth0.com`, etc.) is **excluded** — never saved.
 
-**Dark Mode Interface:**
-- Eye-friendly dark theme (#0f172a background)
-- Gradient accents (indigo to purple)
-- Professional typography
-- Smooth animations and transitions
+---
 
-**Responsive Layout:**
-- Optimized for popup window (500px width)
-- Touch-friendly buttons and controls
-- Clear visual hierarchy
-- Accessible color contrasts
+## 💾 Google Drive Sync — Google Docs Format Only
 
-**Interactive Elements:**
-- Smooth tab switching
-- Hover effects on site items
-- Loading states and feedback
-- Toast notifications
+All Drive operations use **only** `application/vnd.google-apps.document` (Google Doc). No `.txt` files are ever created, listed, or accepted.
 
-### 🔐 Security & Privacy
+### Auto-Discovery & Creation
+1. Queries Drive: `name='AI_Site_Collector_Database' and mimeType='application/vnd.google-apps.document'`
+2. Reuses existing doc if found; creates a new one if not
+3. Writes an initial header on creation using the Docs `batchUpdate` API
+4. Saves `driveDocId` to `chrome.storage.local` — persisted for all future syncs
 
-**Data Protection:**
-- All data stored locally on your device
-- No tracking or analytics
-- No ads or third-party integrations
-- OAuth 2.0 for secure Google authentication
+### Append-Only Deduplication
+- Exports the Google Doc as plain text via Drive API
+- Filters sites by checking if their URL already exists in the document
+- Only new, unseen sites are appended — zero duplicates
 
-**Permissions:**
-- `tabs`: Read current tab information
-- `storage`: Store collected sites locally
-- `scripting`: Inject content script on pages
-- `identity`: Google OAuth authentication
-- `<all_urls>`: Access all websites
+### Document Sync Format (per batch)
+```
+============================================================
+SYNC UPDATE — 29/05/2026, 1:30:00 pm | 3 new site(s)
+============================================================
 
-## Advanced Features
+1. ChatGPT
+   URL         : https://chatgpt.com/
+   Type        : AI Platform
+   Description : ChatGPT is an AI-powered conversational assistant by OpenAI.
+   Features    : chatbot, llm, generative, free, api
+   Saved       : 29/05/2026, 1:28:00 pm
 
-### Site Filtering
+──────────────────────────────────────────────────────────
+```
 
-**Filter Options:**
-- **All**: Show all collected sites
-- **AI Sites**: Show only AI-related websites
-- **Useful Sites**: Show only useful tools and resources
+### Auto-Sync on Site Discovery
+When `autoSyncSetting === true` (default), the extension calls `syncToDrive()` automatically whenever a new site is saved — no manual sync needed.
 
-**Search Capability:**
-- Filter by site type
-- Sort by collection date
-- View confidence scores
+### Self-Healing OAuth Pipeline
+- Intercepts `401 Unauthorized` from expired tokens (expire after ~1 hour)
+- Calls `chrome.identity.removeCachedAuthToken` to purge stale token
+- Calls `chrome.identity.getAuthToken({ interactive: false })` for silent refresh
+- Retries sync automatically — no user action required
 
-### Site Management
+---
 
-**Operations:**
-- **View Details**: Click any site to see full information
-- **Open in New Tab**: Click site to open in browser
-- **Clear All**: Delete all collected sites at once
-- **Sync History**: Track last sync timestamp
+## 📊 Widescreen Options Dashboard
 
-### Settings & Preferences
+Opened via `chrome.runtime.openOptionsPage()` in its own full browser tab:
 
-**Configuration Options:**
-- Auto-sync to Drive (toggle)
-- Notification preferences (toggle)
-- Dark mode (toggle)
-- Sign out from Google account
+- **Real-time search** — filters collected sites by title, URL, or description instantly
+- **Category filters** — All / AI Sites / Useful Sites
+- **Individual card deletion** — hover to reveal × button, removes site from local storage
+- **Custom keyword CRUD** — add/remove custom AI or useful keywords with tag UI
+- **Account panel** — shows signed-in avatar + email, sign-out with confirmation dialog
+- **Drive sync status** — shows last sync timestamp and manual sync button
+- **Reactive sync** — all changes from popup (settings, keywords, auth) reflect instantly via `chrome.storage.onChanged`
 
-### Metadata Extraction
+---
 
-**Collected Information:**
-- Page title
-- Full URL
-- Meta description
-- Favicon (if available)
-- Keywords (if available)
-- Page classification
-- Confidence score
-- Collection timestamp
+## 🔔 Notifications
 
-## Technical Features
+When a new site is detected and saved, Chrome sends a desktop notification:
+> **"Site Saved!"**
+> "ChatGPT has been saved."
 
-### Content Analysis
+Controlled by the **Show Notifications** toggle in Settings. The toggle value is read from `chrome.storage.local` at the moment of saving — toggling it OFF immediately stops all future notifications.
 
-**Page Scanning:**
-- Analyzes page title
-- Extracts meta descriptions
-- Reads Open Graph tags
-- Scans first paragraph for fallback
-- Extracts keywords from meta tags
+---
 
-**Intelligent Deduplication:**
-- Prevents saving duplicate URLs
-- Checks against existing collection
-- Avoids redundant Drive syncs
+## ⚙️ Settings — Persist Across Reloads
 
-### Background Processing
+| Setting | Default | Key |
+|---|---|---|
+| Auto-sync to Drive | ON | `autoSyncSetting` |
+| Show notifications | ON | `notificationsSetting` |
+| Dark mode | OFF | `darkModeSetting` |
 
-**Service Worker:**
-- Runs continuously in background
-- Processes content script messages
-- Manages Google Drive API calls
-- Handles storage operations
-- Sends notifications
+**Fixed in v3.1:** `onInstalled` now checks `details.reason === 'install'`. User preferences are **never reset** on extension update or developer-mode reload. On updates, only domain lists are refreshed; user toggle states are read from storage and preserved.
 
-### 🔄 Dynamic Window Synchronization
+---
 
-- **Fully Reactive Local Storage:** Multi-page synchronization using `chrome.storage.onChanged` ensures that any toggle change, custom keyword modification, account login/logout, or document selection in one window instantly reflects in all other open extension views (such as the popup and options dashboard).
+## 🔑 Custom Keyword Scanner
 
-## Performance Features
+Users can define custom keywords to detect platforms the built-in KB might miss:
 
-### Optimization
+- Added under **Settings → Custom Site Finding Keywords**
+- Two categories: **AI Site** or **Useful Site**
+- Stored in `customAiKeywords[]` and `customUsefulKeywords[]` in `chrome.storage.local`
+- `content.js` reads these on every page load and merges them into the keyword scoring pipeline
+- Tags are displayed in both the popup and the dashboard
 
-**Efficient Processing:**
-- Minimal CPU usage
-- Low memory footprint
-- Fast page scanning (2-second delay)
-- Cached site data
+---
 
-**Storage Management:**
-- Local storage optimization
-- Efficient database text generation
-- Incremental Drive updates
-- Automatic file management
+## 🔄 Reactive Multi-Window Sync
 
-## Extensibility
+All UI windows (popup + options dashboard) stay in sync via `chrome.storage.onChanged`:
+- Toggle a setting in popup → Options Dashboard updates immediately
+- Add a keyword in Dashboard → Popup reflects it instantly
+- Sign in/out → All windows update auth state in real time
+- New site detected → Both popup and dashboard refresh automatically
 
-### Customization Options
+---
 
-**Easy Modifications:**
-- Edit keyword lists in `content.js`
-- Customize UI colors in `styles.css`
-- Modify detection logic in `background.js`
-- Adjust popup layout in `index.html`
+## 🎨 UI Design
 
-### Future Enhancement Possibilities
+- **Dark theme** by default — background `#0f172a`, gradient accents indigo→purple
+- **Glassmorphism slider toggles** for settings
+- **Smooth animations** on hover, card reveal, and modal open/close
+- **Keyword tag chips** with remove (×) button
+- **Confidence score badges** per site card
+- **Category type badges** — `AI Platform` or `Useful Tool`
+- **Profile avatar** — circular gradient badge showing first letter of signed-in email
 
-- [ ] Export to multiple formats (JSON, Excel, PDF)
-- [x] Custom keyword management UI
-- [ ] Site categorization and tagging system
-- [x] Advanced search and filtering
-- [x] Bulk operations (batch export, delete)
-- [ ] Integration with other cloud services
-- [ ] Browser sync across devices
-- [ ] Scheduled auto-sync
-- [ ] Email notifications
-- [ ] Webhook integrations
+---
 
-## Browser Compatibility
+## 🔐 Security & Privacy
 
-**Supported Browsers:**
-- Chrome 88+
-- Edge 88+ (Chromium-based)
-- Brave (Chromium-based)
-- Opera (Chromium-based)
+- All data stored locally — `chrome.storage.local`
+- OAuth 2.0 — password never stored or seen by extension
+- No tracking, no analytics, no third-party connections
+- Drive API writes only to `AI_Site_Collector_Database` Google Doc
+- Auth pages fully excluded from collection
+- Domain rules fetched from GitHub with strict regex validation (prevents prototype pollution)
 
-**Requirements:**
-- Google account for Drive integration
-- Internet connection for sync
-- Chrome extensions enabled
+---
 
-## Usage Statistics
+## 📦 API Integrations
 
-**Typical Usage:**
-- **Detection Time**: 2-3 seconds per page
-- **Storage**: ~1KB per site (local)
-- **Sync Time**: 2-5 seconds (depends on site count)
-- **Drive File Size**: ~5KB per 100 sites (TXT)
+| API | Purpose |
+|---|---|
+| **Google Drive API v3** | Search for existing Google Doc, auto-create if missing |
+| **Google Docs API v1** | Write initial header, append sync batches (`batchUpdate`) |
+| **Chrome Identity API** | OAuth token fetch, silent refresh, cache removal |
+| **Chrome Storage API** | Local site persistence, settings, reactive cross-window sync |
+| **Chrome Notifications API** | Desktop notification on site save |
+| **Chrome Runtime API** | Message passing between content script → background → popup |
+| **GitHub Raw Content** | Fetch `domain_rules.json` for dynamic classification updates |
 
-## Support & Documentation
+---
 
-**Included Documentation:**
-- `README.md`: Complete user guide
-- `QUICKSTART.md`: 30-second setup
-- `SETUP_OAUTH.md`: Google OAuth configuration
-- `FEATURES.md`: This file
+## 📋 Detected Categories
 
-**External Resources:**
-- Chrome Extension Development Guide
-- Google Drive API Documentation
-- Google OAuth 2.0 Documentation
+### AI Platforms (examples)
+ChatGPT, Claude, Gemini, Perplexity, Midjourney, Cursor, GitHub Copilot, Runway, ElevenLabs, Suno, Udio, Hugging Face, Replicate, Cohere, Mistral, DeepSeek, Manus, Emergent AI, and 500+ more.
 
-## Feedback & Improvements
+### Useful Tools (examples)
+GitHub, Stack Overflow, Figma, Notion, Vercel, Supabase, Linear, Postman, VS Code Web, CodePen, StackBlitz, npm, MDN, and more.
 
-The extension is designed to be:
-- **User-Friendly**: Intuitive interface
-- **Reliable**: Robust error handling
-- **Secure**: Privacy-first approach
-- **Performant**: Minimal resource usage
-- **Maintainable**: Clean, documented code
+### Cybersecurity / Pentest AI
+`pentest.ai`, `pentesting.ai`, and any security tool detected via `pentest`, `penetration testing`, `vulnerability scanner`, `cybersecurity` keywords.
 
-For suggestions or improvements, consider:
-- Customizing the keyword lists
-- Extending the detection logic
-- Adding new export formats
-- Integrating with other services
+---
+
+## 🚀 Performance
+
+| Metric | Value |
+|---|---|
+| KB lookup | < 1ms (in-memory) |
+| Full page scan delay | 2 seconds after DOM load |
+| Drive sync time | 2–8 seconds depending on doc size |
+| Storage per site | ~1 KB local |
+| Drive doc size per 100 sites | ~8 KB (Google Doc) |
