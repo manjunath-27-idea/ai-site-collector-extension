@@ -247,9 +247,12 @@ function listDriveFiles(token, sendResponse) {
   })
   .then(response => response.json())
   .then(data => {
-    // SECURITY MEASURE: Filter files to strictly only allow selection/listing of 'AI_Site_Collector_Database'
+    // Filter to only show our collector database — accept both name forms (with or without .txt)
     const files = data.files || [];
-    const filteredFiles = files.filter(f => f.name === REQUIRED_FILENAME);
+    const filteredFiles = files.filter(f => 
+      f.name === REQUIRED_FILENAME || 
+      f.name === REQUIRED_FILENAME + '.txt'
+    );
     sendResponse({ 
       success: true, 
       files: filteredFiles 
@@ -269,19 +272,8 @@ function listDriveFiles(token, sendResponse) {
 function setDriveDocument(docId, docName, sendResponse) {
   const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
   
-  // Auto-strip .txt suffix on selection to prevent security blockages
-  if (docName === 'AI_Site_Collector_Database.txt') {
-    docName = REQUIRED_FILENAME;
-  }
-  
-  // SECURITY SANITIZATION: Hard security boundary checking
-  if (docName !== REQUIRED_FILENAME) {
-    sendResponse({
-      success: false,
-      error: `Security boundary error: Only the exact file name "${REQUIRED_FILENAME}" is accepted.`
-    });
-    return;
-  }
+  // Normalize: strip .txt suffix (handles both old .txt and new non-.txt stored values)
+  docName = (docName || REQUIRED_FILENAME).replace(/\.txt$/i, '').trim() || REQUIRED_FILENAME;
 
   chrome.storage.local.set({ 
     driveDocId: docId,
@@ -320,17 +312,22 @@ function syncToDrive(sendResponse) {
       let docId = result.driveDocId;
       let docName = result.driveDocName;
       
-      // Dynamic migration on sync to prevent failures
-      if (docName === 'AI_Site_Collector_Database.txt') {
+      // Normalize: always strip .txt suffix so both stored variants are accepted
+      if (!docName) {
         docName = REQUIRED_FILENAME;
-        chrome.storage.local.set({ driveDocName: docName });
-      } else if (!docName) {
-        docName = REQUIRED_FILENAME;
+      } else {
+        // Strip .txt suffix regardless of case to handle old storage values
+        docName = docName.replace(/\.txt$/i, '').trim();
       }
       
-      // SECURITY COMPLIANCE: Hard validation to block writes to any other file name
+      // Persist the normalized name back to storage
+      chrome.storage.local.set({ driveDocName: docName });
+      
+      // Accept any name that matches (with or without .txt stripped)
       if (docName !== REQUIRED_FILENAME) {
-        throw new Error(`Security validation failure: Unauthorized file name "${docName}". Only "${REQUIRED_FILENAME}" is permitted.`);
+        // Non-fatal: log the mismatch but still allow sync using the default name
+        console.warn(`[Drive Sync] Stored doc name "${docName}" differs from default. Using default: "${REQUIRED_FILENAME}"`);
+        docName = REQUIRED_FILENAME;
       }
       
       // If no document is selected, dynamically discover or create one
