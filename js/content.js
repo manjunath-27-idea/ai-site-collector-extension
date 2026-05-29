@@ -243,6 +243,10 @@ const AI_KNOWLEDGE_BASE = [
     description: "A state-of-the-art agentic AI coding environment featuring deep repository context, multi-agent coordination, and autotesting capabilities.",
     tags: ['coding','editor','agent','ide'] },
 
+  { domains: ['emergent.sh'], name: 'Emergent AI (emergent.sh)', category: 'ai',
+    description: "An AI-native multi-agent developer platform designed for autonomous full-stack software construction, execution, and deployment.",
+    tags: ['coding', 'agent', 'ide', 'deploy'] },
+
   { domains: ['copilot.github.com', 'github.com/features/copilot'], name: 'GitHub Copilot', category: 'ai',
     description: "GitHub's premier AI pair programmer offering autocomplete, repository-aware chat, and autonomous coding agents.",
     tags: ['coding','copilot','github','agent'] },
