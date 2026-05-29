@@ -382,8 +382,8 @@ function syncToDrive(sendResponse) {
 async function getOrCreateDefaultDoc(token) {
   const fileName = 'AI_Site_Collector_Database';
   
-  // 1. Search for existing file with this name
-  const queryUrl = `https://www.googleapis.com/drive/v3/files?q=name='${fileName}'+and+trashed=false&fields=files(id,name)`;
+  // 1. Search for existing native Google Doc with this name
+  const queryUrl = `https://www.googleapis.com/drive/v3/files?q=name='${fileName}'+and+mimeType='application/vnd.google-apps.document'+and+trashed=false&fields=files(id,name)`;
   const searchResponse = await fetch(queryUrl, {
     headers: { Authorization: 'Bearer ' + token }
   });
@@ -408,7 +408,7 @@ async function getOrCreateDefaultDoc(token) {
     return existingDoc.id;
   }
   
-  // 2. Create a new file if it does not exist
+  // 2. Create a new native Google Doc if it does not exist
   const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     headers: {
@@ -417,7 +417,7 @@ async function getOrCreateDefaultDoc(token) {
     },
     body: JSON.stringify({
       name: fileName,
-      mimeType: 'text/plain'
+      mimeType: 'application/vnd.google-apps.document'
     })
   });
   
@@ -429,15 +429,24 @@ async function getOrCreateDefaultDoc(token) {
   const newFile = await createResponse.json();
   const docId = newFile.id;
   
-  // 3. Write initial header content to the newly created file
+  // 3. Write initial header content using Google Docs API batchUpdate
   const initialContent = '# AI Site Collector Sync Database\n\n';
-  const uploadResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`, {
-    method: 'PATCH',
+  const uploadResponse = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
+    method: 'POST',
     headers: {
       Authorization: 'Bearer ' + token,
-      'Content-Type': 'text/plain'
+      'Content-Type': 'application/json'
     },
-    body: initialContent
+    body: JSON.stringify({
+      requests: [
+        {
+          insertText: {
+            text: initialContent,
+            endOfSegmentLocation: {}
+          }
+        }
+      ]
+    })
   });
   
   if (!uploadResponse.ok) {
@@ -527,8 +536,8 @@ function generateDocumentContent(sites) {
  */
 async function appendToDocument(token, docId, sites) {
   try {
-    // Get current document content
-    let getResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${docId}?alt=media`, {
+    // Get current Google Doc content exported as plain text
+    let getResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${docId}/export?mimeType=text/plain`, {
       headers: { Authorization: 'Bearer ' + token }
     });
 
@@ -536,7 +545,7 @@ async function appendToDocument(token, docId, sites) {
     if (getResponse.status === 404) {
       console.log('[Drive Sync] Stored document ID returned 404. Auto-recreating sync database...');
       const newDocId = await getOrCreateDefaultDoc(token);
-      getResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${newDocId}?alt=media`, {
+      getResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${newDocId}/export?mimeType=text/plain`, {
         headers: { Authorization: 'Bearer ' + token }
       });
       docId = newDocId; // Update docId reference
@@ -553,12 +562,6 @@ async function appendToDocument(token, docId, sites) {
     const newSites = sites.filter(site => !currentContent.includes(site.url));
     if (newSites.length === 0) {
       return 0; // No new unique sites to sync
-    }
-
-    // Standardize Markdown headers if the file is empty or does not have them
-    const mdHeader = '# AI Site Collector Sync Database';
-    if (!currentContent.trim() || !currentContent.includes(mdHeader)) {
-      currentContent = mdHeader + '\n\n';
     }
 
     // Generate Markdown blocks for the new sites
@@ -578,19 +581,25 @@ async function appendToDocument(token, docId, sites) {
     });
 
     // Make sure we space properly before appending new blocks
-    let combinedContent = currentContent.trim();
-    if (!combinedContent.endsWith('---')) {
-      combinedContent += '\n\n---\n\n';
-    } else {
-      combinedContent += '\n\n';
-    }
-    combinedContent += newBlocks.join('\n---\n\n') + '\n\n---\n';
+    let combinedNewContent = '\n\n---\n\n' + newBlocks.join('\n---\n\n') + '\n\n---\n';
     
-    // Update document with combined content
-    const updateResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`, {
-      method: 'PATCH',
-      headers: { Authorization: 'Bearer ' + token },
-      body: combinedContent
+    // Update Google Doc by appending content using Google Docs API batchUpdate
+    const updateResponse = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
+      method: 'POST',
+      headers: { 
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        requests: [
+          {
+            insertText: {
+              text: combinedNewContent,
+              endOfSegmentLocation: {}
+            }
+          }
+        ]
+      })
     });
 
     if (!updateResponse.ok) {
