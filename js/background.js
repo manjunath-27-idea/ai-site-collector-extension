@@ -75,14 +75,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   } else if (request.action === 'getDriveDocument') {
     chrome.storage.local.get(['driveDocId', 'driveDocName'], (result) => {
-      let docName = result.driveDocName;
-      if (docName === 'AI_Site_Collector_Database.txt') {
-        docName = 'AI_Site_Collector_Database';
-        chrome.storage.local.set({ driveDocName: docName });
-      }
+      // Always return the clean doc name — no .txt extension ever
+      const docName = (result.driveDocName || 'AI_Site_Collector_Database').replace(/\.txt$/i, '').trim();
       sendResponse({ 
         docId: result.driveDocId,
-        docName: docName || 'AI_Site_Collector_Database'
+        docName: docName
       });
     });
     return true;
@@ -238,24 +235,25 @@ function authenticateWithGoogle(sendResponse) {
 }
 
 /**
- * List files in Google Drive
+ * List Google Docs files in Drive (Google Docs format only)
  */
 function listDriveFiles(token, sendResponse) {
   const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
-  fetch('https://www.googleapis.com/drive/v3/files?pageSize=50&fields=files(id,name,mimeType,modifiedTime)&q=trashed=false&orderBy=modifiedTime%20desc', {
+  // Query Drive for ONLY Google Docs matching our document name — no .txt files ever
+  const q = encodeURIComponent(
+    `name='${REQUIRED_FILENAME}' and mimeType='application/vnd.google-apps.document' and trashed=false`
+  );
+  fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime%20desc`, {
     headers: { Authorization: 'Bearer ' + token }
   })
-  .then(response => response.json())
+  .then(response => {
+    if (!response.ok) throw new Error(`Drive API error: ${response.statusText}`);
+    return response.json();
+  })
   .then(data => {
-    // Filter to only show our collector database — accept both name forms (with or without .txt)
-    const files = data.files || [];
-    const filteredFiles = files.filter(f => 
-      f.name === REQUIRED_FILENAME || 
-      f.name === REQUIRED_FILENAME + '.txt'
-    );
     sendResponse({ 
       success: true, 
-      files: filteredFiles 
+      files: data.files || []
     });
   })
   .catch(error => {
@@ -267,21 +265,21 @@ function listDriveFiles(token, sendResponse) {
 }
 
 /**
- * Set the Google Drive document for storage (single document mode)
+ * Set the Google Drive document for syncing (Google Docs format only)
  */
 function setDriveDocument(docId, docName, sendResponse) {
   const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
   
-  // Normalize: strip .txt suffix (handles both old .txt and new non-.txt stored values)
-  docName = (docName || REQUIRED_FILENAME).replace(/\.txt$/i, '').trim() || REQUIRED_FILENAME;
+  // Always store the clean name — no file extension, Google Docs have no extension
+  const cleanName = (docName || REQUIRED_FILENAME).replace(/\.txt$/i, '').trim() || REQUIRED_FILENAME;
 
   chrome.storage.local.set({ 
     driveDocId: docId,
-    driveDocName: docName
+    driveDocName: cleanName
   });
   sendResponse({ 
     success: true, 
-    message: `Document "${docName}" selected successfully` 
+    message: `Google Doc "${cleanName}" selected successfully` 
   });
 }
 
@@ -310,29 +308,15 @@ function syncToDrive(sendResponse) {
     try {
       const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
       let docId = result.driveDocId;
-      let docName = result.driveDocName;
+      // docName is always stored without extension — it's a Google Doc, not a file
+      const docName = (result.driveDocName || REQUIRED_FILENAME).replace(/\.txt$/i, '').trim() || REQUIRED_FILENAME;
       
-      // Normalize: always strip .txt suffix so both stored variants are accepted
-      if (!docName) {
-        docName = REQUIRED_FILENAME;
-      } else {
-        // Strip .txt suffix regardless of case to handle old storage values
-        docName = docName.replace(/\.txt$/i, '').trim();
-      }
-      
-      // Persist the normalized name back to storage
+      // Persist clean name back to storage (migration safety for old .txt values)
       chrome.storage.local.set({ driveDocName: docName });
       
-      // Accept any name that matches (with or without .txt stripped)
-      if (docName !== REQUIRED_FILENAME) {
-        // Non-fatal: log the mismatch but still allow sync using the default name
-        console.warn(`[Drive Sync] Stored doc name "${docName}" differs from default. Using default: "${REQUIRED_FILENAME}"`);
-        docName = REQUIRED_FILENAME;
-      }
-      
-      // If no document is selected, dynamically discover or create one
+      // If no document ID is stored, auto-discover or create a Google Doc
       if (!docId) {
-        console.log('[Drive Sync] No document selected. Auto-discovering or creating default sync document...');
+        console.log('[Drive Sync] No Google Doc linked. Auto-discovering or creating one...');
         docId = await getOrCreateDefaultDoc(result.authToken);
       }
       
@@ -393,16 +377,19 @@ function syncToDrive(sendResponse) {
 }
 
 /**
- * Automatically find or create the default sync document in Google Drive
+ * Automatically find or create the default Google Doc in Drive
+ * Only works with Google Docs format (application/vnd.google-apps.document)
  */
 async function getOrCreateDefaultDoc(token) {
-  const fileName = 'AI_Site_Collector_Database';
+  const DOC_NAME = 'AI_Site_Collector_Database';
+  const GDOC_MIME = 'application/vnd.google-apps.document';
   
-  // 1. Search for existing native Google Doc with this name
-  const queryUrl = `https://www.googleapis.com/drive/v3/files?q=name='${fileName}'+and+mimeType='application/vnd.google-apps.document'+and+trashed=false&fields=files(id,name)`;
-  const searchResponse = await fetch(queryUrl, {
-    headers: { Authorization: 'Bearer ' + token }
-  });
+  // 1. Search Drive strictly for a Google Doc (not .txt, not any other format)
+  const q = encodeURIComponent(`name='${DOC_NAME}' and mimeType='${GDOC_MIME}' and trashed=false`);
+  const searchResponse = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`,
+    { headers: { Authorization: 'Bearer ' + token } }
+  );
   
   if (!searchResponse.ok) {
     if (searchResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
@@ -410,21 +397,20 @@ async function getOrCreateDefaultDoc(token) {
   }
   
   const searchData = await searchResponse.json();
-  const files = searchData.files || [];
+  const files = (searchData.files || []).filter(f => f.mimeType === GDOC_MIME);
   
   if (files.length > 0) {
+    // Found existing Google Doc — reuse it
     const existingDoc = files[0];
-    // Save to storage reactively
     await new Promise((resolve) => {
-      chrome.storage.local.set({
-        driveDocId: existingDoc.id,
-        driveDocName: existingDoc.name
-      }, resolve);
+      chrome.storage.local.set({ driveDocId: existingDoc.id, driveDocName: DOC_NAME }, resolve);
     });
+    console.log(`[Drive Sync] Found existing Google Doc: "${DOC_NAME}" (id: ${existingDoc.id})`);
     return existingDoc.id;
   }
   
-  // 2. Create a new native Google Doc if it does not exist
+  // 2. No Google Doc found — create a new one
+  console.log(`[Drive Sync] Creating new Google Doc: "${DOC_NAME}"`);
   const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     headers: {
@@ -432,52 +418,39 @@ async function getOrCreateDefaultDoc(token) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      name: fileName,
-      mimeType: 'application/vnd.google-apps.document'
+      name: DOC_NAME,
+      mimeType: GDOC_MIME   // ← Strictly Google Doc format, never .txt
     })
   });
   
   if (!createResponse.ok) {
     if (createResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    throw new Error(`Failed to create Drive document: ${createResponse.statusText}`);
+    throw new Error(`Failed to create Google Doc: ${createResponse.statusText}`);
   }
   
   const newFile = await createResponse.json();
   const docId = newFile.id;
   
-  // 3. Write initial header content using Google Docs API batchUpdate
-  const initialContent = '# AI Site Collector Sync Database\n\n';
-  const uploadResponse = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
+  // 3. Write the initial header into the new Google Doc using the Docs API
+  const initialContent = 'AI Site Collector — Sync Database\n\nThis document is auto-managed by the AI Site Collector extension.\n\n';
+  const initResponse = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
     method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + token,
-      'Content-Type': 'application/json'
-    },
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      requests: [
-        {
-          insertText: {
-            text: initialContent,
-            endOfSegmentLocation: {}
-          }
-        }
-      ]
+      requests: [{ insertText: { text: initialContent, endOfSegmentLocation: {} } }]
     })
   });
   
-  if (!uploadResponse.ok) {
-    if (uploadResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    throw new Error(`Failed to write initial content: ${uploadResponse.statusText}`);
+  if (!initResponse.ok) {
+    if (initResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+    throw new Error(`Failed to write header to Google Doc: ${initResponse.statusText}`);
   }
   
-  // Save to storage reactively
   await new Promise((resolve) => {
-    chrome.storage.local.set({
-      driveDocId: docId,
-      driveDocName: fileName
-    }, resolve);
+    chrome.storage.local.set({ driveDocId: docId, driveDocName: DOC_NAME }, resolve);
   });
   
+  console.log(`[Drive Sync] Created new Google Doc: "${DOC_NAME}" (id: ${docId})`);
   return docId;
 }
 
@@ -548,85 +521,86 @@ function generateDocumentContent(sites) {
 }
 
 /**
- * Append sites to existing Google Document
+ * Append new sites to an existing Google Doc (Google Docs format only)
+ * Reads existing content via Docs API export, deduplicates by URL, then appends.
  */
 async function appendToDocument(token, docId, sites) {
-  try {
-    // Get current Google Doc content exported as plain text
-    let getResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${docId}/export?mimeType=text/plain`, {
-      headers: { Authorization: 'Bearer ' + token }
-    });
+  // ── Step 1: Read current Google Doc content to deduplicate ──
+  // Use Drive export to get plain-text content for URL deduplication check
+  let exportResponse = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${docId}/export?mimeType=text/plain`,
+    { headers: { Authorization: 'Bearer ' + token } }
+  );
 
-    // Self-healing: if the cached docId returns 404 (file deleted or invalid), re-create it dynamically
-    if (getResponse.status === 404) {
-      console.log('[Drive Sync] Stored document ID returned 404. Auto-recreating sync database...');
-      const newDocId = await getOrCreateDefaultDoc(token);
-      getResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${newDocId}/export?mimeType=text/plain`, {
-        headers: { Authorization: 'Bearer ' + token }
-      });
-      docId = newDocId; // Update docId reference
-    }
-
-    if (!getResponse.ok) {
-      if (getResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-      throw new Error(`Failed to read Drive document: ${getResponse.statusText}`);
-    }
-
-    let currentContent = await getResponse.text();
-    
-    // Filter out sites that are already in the Drive file by checking if the URL is present
-    const newSites = sites.filter(site => !currentContent.includes(site.url));
-    if (newSites.length === 0) {
-      return 0; // No new unique sites to sync
-    }
-
-    // Generate Markdown blocks for the new sites
-    const newBlocks = newSites.map(site => {
-      const features = extractFeatures(site);
-      const category = site.classification.isAI ? 'AI Platform' : 'Useful Tool';
-      const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
-      
-      let block = `### ${site.title}\n`;
-      block += `* **URL:** ${site.url}\n`;
-      block += `* **Type:** ${category}\n`;
-      block += `* **Description:** ${cleanDesc}\n`;
-      if (features.length > 0) {
-        block += `* **Features:** ${features.join(', ')}\n`;
-      }
-      return block;
-    });
-
-    // Make sure we space properly before appending new blocks
-    let combinedNewContent = '\n\n---\n\n' + newBlocks.join('\n---\n\n') + '\n\n---\n';
-    
-    // Update Google Doc by appending content using Google Docs API batchUpdate
-    const updateResponse = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
-      method: 'POST',
-      headers: { 
-        Authorization: 'Bearer ' + token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        requests: [
-          {
-            insertText: {
-              text: combinedNewContent,
-              endOfSegmentLocation: {}
-            }
-          }
-        ]
-      })
-    });
-
-    if (!updateResponse.ok) {
-      if (updateResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-      throw new Error(`Failed to update Drive document: ${updateResponse.statusText}`);
-    }
-
-    return newSites.length;
-  } catch (error) {
-    throw error;
+  // Self-healing: if the Google Doc was deleted, recreate it
+  if (exportResponse.status === 404) {
+    console.log('[Drive Sync] Google Doc not found (404). Recreating...');
+    const newDocId = await getOrCreateDefaultDoc(token);
+    exportResponse = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${newDocId}/export?mimeType=text/plain`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    docId = newDocId;
   }
+
+  if (!exportResponse.ok) {
+    if (exportResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+    throw new Error(`Failed to read Google Doc: ${exportResponse.statusText}`);
+  }
+
+  const currentContent = await exportResponse.text();
+
+  // ── Step 2: Filter to only brand-new sites not already in the document ──
+  const newSites = sites.filter(site => !currentContent.includes(site.url));
+  if (newSites.length === 0) {
+    return 0; // All sites already synced — nothing to add
+  }
+
+  // ── Step 3: Build the text block to insert ──
+  const timestamp = new Date().toLocaleString();
+  let textToInsert = `\n\n${'='.repeat(60)}\nSYNC UPDATE — ${timestamp} | ${newSites.length} new site(s)\n${'='.repeat(60)}\n\n`;
+
+  newSites.forEach((site, i) => {
+    const features = extractFeatures(site);
+    const category = site.classification.isAI ? 'AI Platform' : 'Useful Tool';
+    const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
+    const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
+
+    textToInsert += `${i + 1}. ${site.title}\n`;
+    textToInsert += `   URL         : ${site.url}\n`;
+    textToInsert += `   Type        : ${category}\n`;
+    textToInsert += `   Description : ${cleanDesc}\n`;
+    if (features.length > 0) {
+      textToInsert += `   Features    : ${features.join(', ')}\n`;
+    }
+    textToInsert += `   Saved       : ${savedDate}\n\n`;
+  });
+
+  textToInsert += `${'─'.repeat(60)}\n`;
+
+  // ── Step 4: Append to the Google Doc using the Docs API batchUpdate ──
+  const updateResponse = await fetch(
+    `https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`,
+    {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{
+          insertText: {
+            text: textToInsert,
+            endOfSegmentLocation: {}   // always appends at the end of the document
+          }
+        }]
+      })
+    }
+  );
+
+  if (!updateResponse.ok) {
+    if (updateResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+    throw new Error(`Failed to update Google Doc: ${updateResponse.statusText}`);
+  }
+
+  return newSites.length;
 }
 
 /**
