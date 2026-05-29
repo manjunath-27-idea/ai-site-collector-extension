@@ -233,7 +233,12 @@ const AI_KNOWLEDGE_BASE = [
     description: "AI music creation platform for generating professional-quality songs.",
     tags: ['music','audio','generative'] },
 
-  // â”€â”€ Code AI â”€â”€
+  // ── Security & Pentesting AI ──
+  { domains: ['pentest.ai', 'pentesting.ai'], name: 'Pentest.ai', category: 'ai',
+    description: "AI-powered penetration testing platform that automates vulnerability discovery, API security testing, and ethical hacking.",
+    tags: ['security', 'pentest', 'vulnerability', 'developer'] },
+
+  // ── Code AI ──
   { domains: ['cursor.sh','cursor.com'], name: 'Cursor', category: 'ai',
     description: "AI-first code editor built on VSCode  -  uses GPT-4 for inline code generation.",
     tags: ['coding','editor','llm','ide'] },
@@ -442,8 +447,14 @@ const USEFUL_DOMAINS = [
 // Useful keyword scoring
 const WEIGHTED_USEFUL_KEYWORDS = [
   { term: 'open source',      weight: 5 },
+  { term: 'pentest',          weight: 5 },
+  { term: 'pentesting',       weight: 5 },
+  { term: 'penetration testing', weight: 5 },
+  { term: 'security scanner', weight: 4 },
   { term: 'documentation',    weight: 4 },
   { term: 'developer tool',   weight: 4 },
+  { term: 'vulnerability',    weight: 3 },
+  { term: 'cybersecurity',    weight: 3 },
   { term: 'framework',        weight: 3 },
   { term: 'library',          weight: 3 },
   { term: 'api reference',    weight: 3 },
@@ -708,7 +719,13 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
       text.includes('machine learning') ||
       text.includes('language model') ||
       text.includes('chatbot') ||
-      text.includes('generative');
+      text.includes('generative') ||
+      text.includes('pentest') ||
+      text.includes('pentesting') ||
+      text.includes('penetration testing') ||
+      text.includes('cybersecurity') ||
+      text.includes('security scanner') ||
+      text.includes('vulnerability scanner');
 
     if (aiCorroboration) {
       result.isAI = true;
