@@ -334,10 +334,44 @@ function syncToDrive(sendResponse) {
           : `Sync completed: Database is already up to date.`
       });
     } catch (error) {
-      sendResponse({ 
-        success: false, 
-        error: error.message 
-      });
+      if (error.message === 'UNAUTHORIZED_TOKEN' || error.message.includes('401') || error.message.includes('Unauthorized')) {
+        console.log('[Drive Sync] Auth token expired or invalid. Attempting silent refresh...');
+        chrome.identity.removeCachedAuthToken({ token: result.authToken }, () => {
+          chrome.identity.getAuthToken({ interactive: false }, (newToken) => {
+            if (chrome.runtime.lastError || !newToken) {
+              console.log('[Drive Sync] Silent refresh failed. Interactive re-auth required.');
+              sendResponse({
+                success: false,
+                error: 'Authentication session expired. Please open the extension popup and sign in again.'
+              });
+            } else {
+              console.log('[Drive Sync] Silent refresh successful. Retrying sync...');
+              chrome.storage.local.set({ authToken: newToken }, () => {
+                chrome.storage.local.get(['sites', 'driveDocId', 'driveDocName'], async (retryResult) => {
+                  try {
+                    const docId = retryResult.driveDocId || await getOrCreateDefaultDoc(newToken);
+                    const newSitesSyncedCount = await appendToDocument(newToken, docId, retryResult.sites || []);
+                    chrome.storage.local.set({ lastSync: new Date().toISOString() });
+                    sendResponse({
+                      success: true,
+                      message: newSitesSyncedCount > 0 
+                        ? `${newSitesSyncedCount} new sites successfully synced to "${REQUIRED_FILENAME}" (session refreshed)`
+                        : `Sync completed: Database is already up to date.`
+                    });
+                  } catch (retryError) {
+                    sendResponse({ success: false, error: retryError.message });
+                  }
+                });
+              });
+            }
+          });
+        });
+      } else {
+        sendResponse({ 
+          success: false, 
+          error: error.message 
+        });
+      }
     }
   });
 }
@@ -355,6 +389,7 @@ async function getOrCreateDefaultDoc(token) {
   });
   
   if (!searchResponse.ok) {
+    if (searchResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
     throw new Error(`Failed to search Drive: ${searchResponse.statusText}`);
   }
   
@@ -387,6 +422,7 @@ async function getOrCreateDefaultDoc(token) {
   });
   
   if (!createResponse.ok) {
+    if (createResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
     throw new Error(`Failed to create Drive document: ${createResponse.statusText}`);
   }
   
@@ -405,6 +441,7 @@ async function getOrCreateDefaultDoc(token) {
   });
   
   if (!uploadResponse.ok) {
+    if (uploadResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
     throw new Error(`Failed to write initial content: ${uploadResponse.statusText}`);
   }
   
@@ -506,6 +543,7 @@ async function appendToDocument(token, docId, sites) {
     }
 
     if (!getResponse.ok) {
+      if (getResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
       throw new Error(`Failed to read Drive document: ${getResponse.statusText}`);
     }
 
@@ -556,12 +594,13 @@ async function appendToDocument(token, docId, sites) {
     });
 
     if (!updateResponse.ok) {
+      if (updateResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
       throw new Error(`Failed to update Drive document: ${updateResponse.statusText}`);
     }
 
     return newSites.length;
   } catch (error) {
-    throw new Error(`Append failed: ${error.message}`);
+    throw error;
   }
 }
 
