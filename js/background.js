@@ -392,7 +392,27 @@ async function getOrCreateFolder(token) {
   const FOLDER_NAME = 'AI Site Collector';
   const FOLDER_MIME = 'application/vnd.google-apps.folder';
   
-  // 1. Search Drive for our folder
+  // 1. Check local storage first for cached folder ID
+  const cached = await new Promise(resolve => chrome.storage.local.get('driveFolderId', resolve));
+  if (cached.driveFolderId) {
+    try {
+      const checkResponse = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${cached.driveFolderId}?fields=trashed,mimeType`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (checkResponse.ok) {
+        const meta = await checkResponse.json();
+        if (!meta.trashed && meta.mimeType === FOLDER_MIME) {
+          console.log(`[Drive Sync] Using cached folder ID: ${cached.driveFolderId}`);
+          return cached.driveFolderId;
+        }
+      }
+    } catch (err) {
+      console.log('[Drive Sync] Failed to verify cached folder ID, searching/recreating...');
+    }
+  }
+  
+  // 2. Search Drive for our folder
   const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='${FOLDER_MIME}' and trashed=false`);
   const response = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`,
@@ -413,11 +433,13 @@ async function getOrCreateFolder(token) {
   
   const data = await response.json();
   if (data.files && data.files.length > 0) {
-    console.log(`[Drive Sync] Found existing folder: "${FOLDER_NAME}" (id: ${data.files[0].id})`);
-    return data.files[0].id;
+    const folderId = data.files[0].id;
+    await new Promise(resolve => chrome.storage.local.set({ driveFolderId: folderId }, resolve));
+    console.log(`[Drive Sync] Found existing folder: "${FOLDER_NAME}" (id: ${folderId})`);
+    return folderId;
   }
   
-  // 2. Not found: create new folder
+  // 3. Not found: create new folder
   console.log(`[Drive Sync] Creating new folder: "${FOLDER_NAME}"`);
   const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
@@ -444,6 +466,7 @@ async function getOrCreateFolder(token) {
   }
   
   const folder = await createResponse.json();
+  await new Promise(resolve => chrome.storage.local.set({ driveFolderId: folder.id }, resolve));
   console.log(`[Drive Sync] Created folder: "${FOLDER_NAME}" (id: ${folder.id})`);
   return folder.id;
 }

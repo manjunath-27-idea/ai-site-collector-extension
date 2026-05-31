@@ -583,7 +583,8 @@ function logout() {
                 authToken: null,
                 userEmail: null,
                 driveDocId: null,
-                driveDocName: null
+                driveDocName: null,
+                driveFolderId: null
             }, () => {
                 checkAuthStatus();
                 if (typeof settingsModal !== 'undefined' && settingsModal) {
