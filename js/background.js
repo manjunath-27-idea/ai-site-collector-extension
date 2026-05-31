@@ -386,15 +386,80 @@ function syncToDrive(sendResponse) {
 }
 
 /**
- * Automatically find or create the default Google Doc in Drive
- * Only works with Google Docs format (application/vnd.google-apps.document)
+ * Automatically find or create the default Drive folder named "AI Site Collector"
+ */
+async function getOrCreateFolder(token) {
+  const FOLDER_NAME = 'AI Site Collector';
+  const FOLDER_MIME = 'application/vnd.google-apps.folder';
+  
+  // 1. Search Drive for our folder
+  const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`,
+    { headers: { Authorization: 'Bearer ' + token } }
+  );
+  
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+    let errMsg = response.statusText;
+    try {
+      const errJson = await response.json();
+      if (errJson && errJson.error && errJson.error.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch (e) {}
+    throw new Error(`Failed to search Drive folder: ${errMsg}`);
+  }
+  
+  const data = await response.json();
+  if (data.files && data.files.length > 0) {
+    console.log(`[Drive Sync] Found existing folder: "${FOLDER_NAME}" (id: ${data.files[0].id})`);
+    return data.files[0].id;
+  }
+  
+  // 2. Not found: create new folder
+  console.log(`[Drive Sync] Creating new folder: "${FOLDER_NAME}"`);
+  const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: FOLDER_NAME,
+      mimeType: FOLDER_MIME
+    })
+  });
+  
+  if (!createResponse.ok) {
+    if (createResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+    let errMsg = createResponse.statusText;
+    try {
+      const errJson = await createResponse.json();
+      if (errJson && errJson.error && errJson.error.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch (e) {}
+    throw new Error(`Failed to create Drive folder: ${errMsg}`);
+  }
+  
+  const folder = await createResponse.json();
+  console.log(`[Drive Sync] Created folder: "${FOLDER_NAME}" (id: ${folder.id})`);
+  return folder.id;
+}
+
+/**
+ * Automatically find or create the default database file in the "AI Site Collector" folder
  */
 async function getOrCreateDefaultDoc(token, skipIds = []) {
   const DOC_NAME = 'AI_Site_Collector_Database.txt';
   const TEXT_MIME = 'text/plain';
   
-  // 1. Search Drive for our plain text file matching our document name
-  const q = encodeURIComponent(`name='${DOC_NAME}' and mimeType='${TEXT_MIME}' and trashed=false`);
+  // Resolve or create our dedicated folder first
+  const folderId = await getOrCreateFolder(token);
+  
+  // 1. Search Drive for our plain text file matching our document name INSIDE our folder
+  const q = encodeURIComponent(`name='${DOC_NAME}' and mimeType='${TEXT_MIME}' and '${folderId}' in parents and trashed=false`);
   const searchResponse = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`,
     { headers: { Authorization: 'Bearer ' + token } }
@@ -421,12 +486,12 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
     await new Promise((resolve) => {
       chrome.storage.local.set({ driveDocId: existingDoc.id, driveDocName: DOC_NAME }, resolve);
     });
-    console.log(`[Drive Sync] Found existing database: "${DOC_NAME}" (id: ${existingDoc.id})`);
+    console.log(`[Drive Sync] Found existing database in folder: "${DOC_NAME}" (id: ${existingDoc.id})`);
     return existingDoc.id;
   }
   
-  // 2. No file found — create a new one
-  console.log(`[Drive Sync] Creating new plain text database: "${DOC_NAME}"`);
+  // 2. No file found — create a new one inside our folder
+  console.log(`[Drive Sync] Creating new plain text database in folder: "${DOC_NAME}"`);
   const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     headers: {
@@ -435,7 +500,8 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
     },
     body: JSON.stringify({
       name: DOC_NAME,
-      mimeType: TEXT_MIME
+      mimeType: TEXT_MIME,
+      parents: [folderId]
     })
   });
   
