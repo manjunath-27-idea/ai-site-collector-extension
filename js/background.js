@@ -444,7 +444,7 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      requests: [{ insertText: { text: initialContent, endOfSegmentLocation: {} } }]
+      requests: [{ insertText: { text: initialContent, endOfSegmentLocation: { segmentId: "" } } }]
     })
   });
   
@@ -652,7 +652,9 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
         requests: [{
           insertText: {
             text: textToInsert,
-            endOfSegmentLocation: {}   // always appends at the end of the document
+            endOfSegmentLocation: {
+              segmentId: ""
+            }
           }
         }]
       })
