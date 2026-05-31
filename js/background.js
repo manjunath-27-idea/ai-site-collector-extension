@@ -226,6 +226,9 @@ function authenticateWithGoogle(sendResponse) {
         isAuthenticated: true,
         authToken: token,
         userEmail: userInfo.email
+      }, () => {
+        // Auto-initialize the default document in the background so it shows up in UI immediately!
+        getOrCreateDefaultDoc(token).catch(err => console.log('[Auth] Failed to initialize default document:', err));
       });
       sendResponse({ 
         success: true, 
@@ -302,15 +305,6 @@ function syncToDrive(sendResponse) {
       return;
     }
 
-    const sites = result.sites || [];
-    if (sites.length === 0) {
-      sendResponse({ 
-        success: false, 
-        error: 'No sites to sync.' 
-      });
-      return;
-    }
-
     try {
       const REQUIRED_FILENAME = 'AI_Site_Collector_Database.odt';
       let docId = result.driveDocId;
@@ -324,6 +318,15 @@ function syncToDrive(sendResponse) {
       if (!docId) {
         console.log('[Drive Sync] No Google Doc linked. Auto-discovering or creating one...');
         docId = await getOrCreateDefaultDoc(result.authToken);
+      }
+      
+      const sites = result.sites || [];
+      if (sites.length === 0) {
+        sendResponse({ 
+          success: true, 
+          message: 'Database connected. Save websites to sync them here automatically.' 
+        });
+        return;
       }
       
       // Append sites to the document
