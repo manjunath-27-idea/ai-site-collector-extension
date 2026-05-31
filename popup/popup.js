@@ -32,6 +32,7 @@ const popupUserEmailDisplay = document.getElementById('popupUserEmailDisplay');
 const popupVersionBadge = document.getElementById('popupVersionBadge');
 const popupLogoutBtn = document.getElementById('popupLogoutBtn');
 const popupSyncBtn = document.getElementById('popupSyncBtn');
+const popupSyncBadge = document.getElementById('popupSyncBadge');
 const syncStatus = document.getElementById('syncStatus');
 const filterBtns = document.querySelectorAll('.filter-btn');
 
@@ -54,6 +55,7 @@ function init() {
     loadSelectedDocument();
     loadSettings();
     loadCustomKeywords();
+    updateSyncBadge();
 }
 
 /**
@@ -262,11 +264,8 @@ function loadSites() {
 function loadSelectedDocument() {
     chrome.storage.local.get(['driveDocId', 'driveDocName'], (result) => {
         if (result.driveDocId && result.driveDocName) {
-            let docName = result.driveDocName;
-            if (docName.endsWith('.txt')) {
-                docName = docName.substring(0, docName.length - 4);
-                chrome.storage.local.set({ driveDocName: docName });
-            }
+            let docName = result.driveDocName.replace(/(\.txt|\.md)$/i, '').trim();
+            chrome.storage.local.set({ driveDocName: docName });
             docNameDisplay.textContent = `📄 ${docName}`;
             docNameDisplay.parentElement.style.display = 'block';
         } else {
@@ -466,10 +465,10 @@ function createSiteElement(site) {
 
     // Use the specific label from classification, fallback to AI/Useful
     const label = (site.classification && site.classification.label) ||
-                  (site.classification.isAI ? 'AI Tool' : 'Useful Tool');
+                  ((site.classification && site.classification.isAI) ? 'AI Tool' : 'Useful Tool');
     // Derive CSS class from label for color coding
     const badgeClass = getBadgeClass(label);
-    const confidence = Math.round((site.classification.confidence || 0) * 100);
+    const confidence = Math.round(((site.classification && site.classification.confidence) || 0) * 100);
     const savedDate = new Date(site.savedAt || site.timestamp || new Date()).toLocaleDateString();
     const features = extractFeatures(site);
 
@@ -478,7 +477,6 @@ function createSiteElement(site) {
             <div class="site-title">${escapeHtml(site.title)}</div>
             <span class="site-badge ${badgeClass}">${escapeHtml(label)}</span>
         </div>
-        <div class="site-description">${escapeHtml(site.description || 'No description available')}</div>
         <div class="site-url">${escapeHtml(site.url)}</div>
         ${features.length > 0 ? `<div class="site-features">
             <strong>Features:</strong> ${features.map(f => `<span class="feature-tag">${escapeHtml(f)}</span>`).join('')}
@@ -540,10 +538,11 @@ function syncToDrive() {
         syncBtn.disabled = false;
         if (popupSyncBtn) popupSyncBtn.disabled = false;
         
-        if (response.success) {
+        if (response && response.success) {
             updateSyncStatus(response.message);
         } else {
-            updateSyncStatus(`Sync failed: ${response.error}`);
+            const errMsg = response ? response.error : 'Connection lost or service worker inactive. Please try again.';
+            updateSyncStatus(`Sync failed: ${errMsg}`);
         }
     });
 }
@@ -622,6 +621,9 @@ function escapeHtml(text) {
 // Listen for storage changes from background script or options page
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local') {
+        if (changes.sites || changes.isAuthenticated) {
+            updateSyncBadge();
+        }
         if (changes.sites) {
             loadSites();
         }
@@ -739,5 +741,44 @@ function deleteCustomKeyword(kw, type) {
         chrome.storage.local.set({ [storageKey]: keywords }, () => {
             loadCustomKeywords();
         });
+    });
+}
+
+/**
+ * Update the popup sync status badge count & tick icon
+ */
+function updateSyncBadge() {
+    chrome.storage.local.get(['sites', 'isAuthenticated'], (result) => {
+        const popupSyncBadge = document.getElementById('popupSyncBadge');
+        const popupSyncBtn = document.getElementById('popupSyncBtn');
+        if (!popupSyncBadge) return;
+
+        if (!result.isAuthenticated) {
+            popupSyncBadge.style.display = 'none';
+            if (popupSyncBtn) popupSyncBtn.className = 'sync-icon-btn';
+            return;
+        }
+
+        const sites = result.sites || [];
+        const unsyncedCount = sites.filter(s => !s.synced).length;
+
+        popupSyncBadge.style.display = 'inline-flex';
+        if (unsyncedCount > 0) {
+            popupSyncBadge.textContent = unsyncedCount;
+            popupSyncBadge.className = 'sync-badge unsynced';
+            popupSyncBadge.title = `${unsyncedCount} unsynced sites`;
+            if (popupSyncBtn) {
+                popupSyncBtn.className = 'sync-icon-btn unsynced';
+                popupSyncBtn.title = `Sync Collection to Drive (${unsyncedCount} unsynced sites)`;
+            }
+        } else {
+            popupSyncBadge.textContent = '✓';
+            popupSyncBadge.className = 'sync-badge synced';
+            popupSyncBadge.title = 'All sites fully synced to Drive';
+            if (popupSyncBtn) {
+                popupSyncBtn.className = 'sync-icon-btn synced';
+                popupSyncBtn.title = 'All sites fully synced to Drive';
+            }
+        }
     });
 }

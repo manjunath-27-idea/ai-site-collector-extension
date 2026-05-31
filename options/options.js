@@ -512,9 +512,10 @@ function createSiteCard(site) {
     const div = document.createElement('div');
     div.className = 'site-card';
 
-    const type = site.classification.isAI ? 'AI' : 'Useful';
-    const typeClass = site.classification.isAI ? 'ai' : 'useful';
-    const confidence = Math.round((site.classification.confidence || 0) * 100);
+    const isAI = site.classification && site.classification.isAI;
+    const type = isAI ? 'AI' : 'Useful';
+    const typeClass = isAI ? 'ai' : 'useful';
+    const confidence = Math.round(((site.classification && site.classification.confidence) || 0) * 100);
     const savedDate = new Date(site.savedAt || site.timestamp || new Date()).toLocaleDateString();
     const features = extractFeatures(site);
 
@@ -522,7 +523,7 @@ function createSiteCard(site) {
         <div class="site-header">
             <div class="site-title" title="${escapeHtml(site.title)}">${escapeHtml(site.title)}</div>
             <div class="site-badges-box">
-                <span class="site-badge ${typeClass}">${site.classification.label || type}</span>
+                <span class="site-badge ${typeClass}">${(site.classification && site.classification.label) || type}</span>
             </div>
         </div>
         <div class="site-description">${escapeHtml(site.description || 'No description available')}</div>
@@ -581,11 +582,8 @@ function deleteSingleSite(siteId) {
 function loadSelectedDocument() {
     chrome.storage.local.get(['driveDocId', 'driveDocName'], (result) => {
         if (result.driveDocId && result.driveDocName) {
-            let docName = result.driveDocName;
-            if (docName.endsWith('.txt')) {
-                docName = docName.substring(0, docName.length - 4);
-                chrome.storage.local.set({ driveDocName: docName });
-            }
+            let docName = result.driveDocName.replace(/(\.txt|\.md)$/i, '').trim();
+            chrome.storage.local.set({ driveDocName: docName });
             docNameDisplay.textContent = `📄 ${docName}`;
         } else {
             docNameDisplay.textContent = 'No document selected';
@@ -693,10 +691,11 @@ function syncToDrive() {
         syncBtn.disabled = false;
         if (sidebarSyncBtn) sidebarSyncBtn.disabled = false;
         
-        if (response.success) {
+        if (response && response.success) {
             updateSyncStatus(response.message);
         } else {
-            updateSyncStatus(`Sync failed: ${response.error}`);
+            const errMsg = response ? response.error : 'Connection lost or service worker inactive. Please try again.';
+            updateSyncStatus(`Sync failed: ${errMsg}`);
         }
     });
 }

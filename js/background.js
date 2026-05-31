@@ -25,8 +25,8 @@ chrome.runtime.onInstalled.addListener((details) => {
     });
   } else {
     // ── Extension update / reload ──
-    // 1. One-time migration: strip any stale .txt suffix from driveDocName in storage
-    chrome.storage.local.get(['autoSyncSetting', 'notificationsSetting', 'darkModeSetting', 'driveDocName'], (stored) => {
+    // 1. One-time migration: strip any stale .txt suffix from driveDocName in storage and force re-sync to apply new formatting
+    chrome.storage.local.get(['autoSyncSetting', 'notificationsSetting', 'darkModeSetting', 'driveDocName', 'sites'], (stored) => {
       const updates = {
         remoteAiDomains: ['openai.com', 'chatgpt.com', 'claude.ai', 'anthropic.com', 'huggingface.co', 'midjourney.com', 'replicate.com', 'perplexity.ai', 'gemini.google.com', 'cohere.com', 'stability.ai', 'deepseek.com', 'sora.com'],
         remoteUsefulDomains: ['github.com', 'stackoverflow.com', 'npmjs.com', 'figma.com', 'canva.com', 'notion.so', 'trello.com', 'react.dev', 'mdn.mozilla.org', 'w3schools.com', 'stackblitz.com', 'codepen.io'],
@@ -37,10 +37,18 @@ chrome.runtime.onInstalled.addListener((details) => {
         darkModeSetting:      stored.darkModeSetting       !== undefined ? stored.darkModeSetting       : false,
       };
 
-      // ── Migration: clean stale .txt from driveDocName ──
-      if (stored.driveDocName && /\.txt$/i.test(stored.driveDocName)) {
-        updates.driveDocName = stored.driveDocName.replace(/\.txt$/i, '').trim();
-        console.log('[Migration] Cleaned stale driveDocName:', stored.driveDocName, '→', updates.driveDocName);
+      // ── Migration: ensure driveDocName is clean of extensions ──
+      if (stored.driveDocName) {
+        const clean = stored.driveDocName.replace(/(\.txt|\.md)$/i, '').trim();
+        updates.driveDocName = clean;
+        console.log('[Migration] Cleaned driveDocName extensions:', stored.driveDocName, '→', updates.driveDocName);
+      }
+
+      // ── Migration: force reset synced: false on all existing records ──
+      const currentSites = stored.sites || [];
+      if (currentSites.length > 0) {
+        updates.sites = currentSites.map(s => ({ ...s, synced: false }));
+        console.log('[Migration] Reset synced: false on all existing site records to trigger a full formatting re-sync.');
       }
 
       chrome.storage.local.set(updates, () => {
@@ -82,8 +90,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   } else if (request.action === 'getDriveDocument') {
     chrome.storage.local.get(['driveDocId', 'driveDocName'], (result) => {
-      // Always return the clean doc name — no .txt extension ever
-      const docName = (result.driveDocName || 'AI_Site_Collector_Database').replace(/\.txt$/i, '').trim();
+      const docName = (result.driveDocName || 'AI_Site_Collector_Database').replace(/(\.txt|\.md)$/i, '').trim();
       sendResponse({ 
         docId: result.driveDocId,
         docName: docName
@@ -108,6 +115,7 @@ function saveSiteData(siteData, tabId) {
       sites.push({
         ...siteData,
         id: generateId(),
+        synced: false,
         savedAt: new Date().toISOString()
       });
       
@@ -119,17 +127,25 @@ function saveSiteData(siteData, tabId) {
               if (syncResponse && syncResponse.success) {
                 chrome.notifications.create({
                   type: 'basic',
-                  iconUrl: 'icons/icon-128.png',
+                  iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
                   title: 'Saved & Backed Up!',
                   message: `"${siteData.title}" is saved and backed up inside the "AI Site Collector" folder.`
+                }, () => {
+                  if (chrome.runtime.lastError) {
+                    console.log('[Notification] Info:', chrome.runtime.lastError.message);
+                  }
                 });
               } else {
                 const errMsg = (syncResponse && syncResponse.error) || 'Unknown error';
                 chrome.notifications.create({
                   type: 'basic',
-                  iconUrl: 'icons/icon-128.png',
+                  iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
                   title: 'Saved Locally (Sync Failed)',
                   message: `"${siteData.title}" is saved locally, but Drive backup failed: ${errMsg}`
+                }, () => {
+                  if (chrome.runtime.lastError) {
+                    console.log('[Notification] Info:', chrome.runtime.lastError.message);
+                  }
                 });
               }
             }
@@ -139,9 +155,13 @@ function saveSiteData(siteData, tabId) {
           if (result.notificationsSetting !== false) {
             chrome.notifications.create({
               type: 'basic',
-              iconUrl: 'icons/icon-128.png',
+              iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
               title: 'Site Saved!',
               message: `"${siteData.title}" has been saved locally.`
+            }, () => {
+              if (chrome.runtime.lastError) {
+                console.log('[Notification] Info:', chrome.runtime.lastError.message);
+              }
             });
           }
         }
@@ -268,10 +288,8 @@ function authenticateWithGoogle(sendResponse) {
  * List Google Docs files in Drive (Google Docs format only)
  */
 function listDriveFiles(token, sendResponse) {
-  const REQUIRED_FILENAME = 'AI_Site_Collector_Database.txt';
-  const q = encodeURIComponent(
-    `name='${REQUIRED_FILENAME}' and mimeType='text/plain' and trashed=false`
-  );
+  const GDOC_MIME = 'application/vnd.google-apps.document';
+  const q = encodeURIComponent(`mimeType='${GDOC_MIME}' and trashed=false`);
   fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime%20desc`, {
     headers: { Authorization: 'Bearer ' + token }
   })
@@ -297,10 +315,8 @@ function listDriveFiles(token, sendResponse) {
  * Set the Google Drive document for syncing (Google Docs format only)
  */
 function setDriveDocument(docId, docName, sendResponse) {
-  const REQUIRED_FILENAME = 'AI_Site_Collector_Database.txt';
-  
-  // Always store the clean name — no file extension, Google Docs have no extension
-  const cleanName = (docName || REQUIRED_FILENAME).replace(/\.txt$/i, '').trim() || REQUIRED_FILENAME;
+  const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
+  const cleanName = (docName || REQUIRED_FILENAME).replace(/(\.txt|\.md)$/i, '').trim() || REQUIRED_FILENAME;
 
   chrome.storage.local.set({ 
     driveDocId: docId,
@@ -326,15 +342,12 @@ function syncToDrive(sendResponse) {
     }
 
     try {
-      const REQUIRED_FILENAME = 'AI_Site_Collector_Database.txt';
+      const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
       let docId = result.driveDocId;
-      // docName is always stored without extension — it's a Google Doc, not a file
-      const docName = (result.driveDocName || REQUIRED_FILENAME).replace(/\.txt$/i, '').trim() || REQUIRED_FILENAME;
+      const docName = (result.driveDocName || REQUIRED_FILENAME).replace(/(\.txt|\.md)$/i, '').trim() || REQUIRED_FILENAME;
       
-      // Persist clean name back to storage (migration safety for old .txt values)
       chrome.storage.local.set({ driveDocName: docName });
       
-      // If no document ID is stored, auto-discover or create a Google Doc
       if (!docId) {
         console.log('[Drive Sync] No Google Doc linked. Auto-discovering or creating one...');
         docId = await getOrCreateDefaultDoc(result.authToken);
@@ -419,190 +432,278 @@ function syncToDrive(sendResponse) {
 /**
  * Automatically find or create the default Drive folder named "AI Site Collector"
  */
+let activeFolderPromise = null;
+
 async function getOrCreateFolder(token) {
-  const FOLDER_NAME = 'AI Site Collector';
-  const FOLDER_MIME = 'application/vnd.google-apps.folder';
-  
-  // 1. Check local storage first for cached folder ID
-  const cached = await new Promise(resolve => chrome.storage.local.get('driveFolderId', resolve));
-  if (cached.driveFolderId) {
-    try {
-      const checkResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${cached.driveFolderId}?fields=trashed,mimeType`,
-        { headers: { Authorization: 'Bearer ' + token } }
-      );
-      if (checkResponse.ok) {
-        const meta = await checkResponse.json();
-        if (!meta.trashed && meta.mimeType === FOLDER_MIME) {
-          console.log(`[Drive Sync] Using cached folder ID: ${cached.driveFolderId}`);
-          return cached.driveFolderId;
+  if (activeFolderPromise) {
+    console.log('[Drive Sync] Reusing active folder creation promise to prevent duplicates.');
+    return activeFolderPromise;
+  }
+
+  const promise = (async () => {
+    const FOLDER_NAME = 'AI Site Collector';
+    const FOLDER_MIME = 'application/vnd.google-apps.folder';
+    
+    // 1. Check local storage first for cached folder ID
+    const cached = await new Promise(resolve => chrome.storage.local.get('driveFolderId', resolve));
+    if (cached.driveFolderId) {
+      try {
+        const checkResponse = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${cached.driveFolderId}?fields=trashed,mimeType`,
+          { headers: { Authorization: 'Bearer ' + token } }
+        );
+        if (checkResponse.ok) {
+          const meta = await checkResponse.json();
+          if (!meta.trashed && meta.mimeType === FOLDER_MIME) {
+            console.log(`[Drive Sync] Using cached folder ID: ${cached.driveFolderId}`);
+            return cached.driveFolderId;
+          }
         }
+      } catch (err) {
+        console.log('[Drive Sync] Failed to verify cached folder ID, searching/recreating...');
       }
-    } catch (err) {
-      console.log('[Drive Sync] Failed to verify cached folder ID, searching/recreating...');
     }
-  }
-  
-  // 2. Search Drive for our folder
-  const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='${FOLDER_MIME}' and trashed=false`);
-  const response = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`,
-    { headers: { Authorization: 'Bearer ' + token } }
-  );
-  
-  if (!response.ok) {
-    if (response.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    let errMsg = response.statusText;
-    try {
-      const errJson = await response.json();
-      if (errJson && errJson.error && errJson.error.message) {
-        errMsg = errJson.error.message;
-      }
-    } catch (e) {}
-    throw new Error(`Failed to search Drive folder: ${errMsg}`);
-  }
-  
-  const data = await response.json();
-  if (data.files && data.files.length > 0) {
-    const folderId = data.files[0].id;
-    await new Promise(resolve => chrome.storage.local.set({ driveFolderId: folderId }, resolve));
-    console.log(`[Drive Sync] Found existing folder: "${FOLDER_NAME}" (id: ${folderId})`);
-    return folderId;
-  }
-  
-  // 3. Not found: create new folder
-  console.log(`[Drive Sync] Creating new folder: "${FOLDER_NAME}"`);
-  const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + token,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      name: FOLDER_NAME,
-      mimeType: FOLDER_MIME
-    })
+    
+    // 2. Search Drive for our folder
+    const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='${FOLDER_MIME}' and trashed=false`);
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+      let errMsg = response.statusText;
+      try {
+        const errJson = await response.json();
+        if (errJson && errJson.error && errJson.error.message) {
+          errMsg = errJson.error.message;
+        }
+      } catch (e) {}
+      throw new Error(`Failed to search Drive folder: ${errMsg}`);
+    }
+    
+    const data = await response.json();
+    if (data.files && data.files.length > 0) {
+      const folderId = data.files[0].id;
+      await new Promise(resolve => chrome.storage.local.set({ driveFolderId: folderId }, resolve));
+      console.log(`[Drive Sync] Found existing folder: "${FOLDER_NAME}" (id: ${folderId})`);
+      return folderId;
+    }
+    
+    // 3. Not found: create new folder
+    console.log(`[Drive Sync] Creating new folder: "${FOLDER_NAME}"`);
+    const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: FOLDER_NAME,
+        mimeType: FOLDER_MIME
+      })
+    });
+    
+    if (!createResponse.ok) {
+      if (createResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+      let errMsg = createResponse.statusText;
+      try {
+        const errJson = await createResponse.json();
+        if (errJson && errJson.error && errJson.error.message) {
+          errMsg = errJson.error.message;
+        }
+      } catch (e) {}
+      throw new Error(`Failed to create Drive folder: ${errMsg}`);
+    }
+    
+    const folder = await createResponse.json();
+    await new Promise(resolve => chrome.storage.local.set({ driveFolderId: folder.id }, resolve));
+    console.log(`[Drive Sync] Created folder: "${FOLDER_NAME}" (id: ${folder.id})`);
+    return folder.id;
+  })();
+
+  activeFolderPromise = promise;
+  promise.finally(() => {
+    activeFolderPromise = null;
   });
-  
-  if (!createResponse.ok) {
-    if (createResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    let errMsg = createResponse.statusText;
-    try {
-      const errJson = await createResponse.json();
-      if (errJson && errJson.error && errJson.error.message) {
-        errMsg = errJson.error.message;
-      }
-    } catch (e) {}
-    throw new Error(`Failed to create Drive folder: ${errMsg}`);
-  }
-  
-  const folder = await createResponse.json();
-  await new Promise(resolve => chrome.storage.local.set({ driveFolderId: folder.id }, resolve));
-  console.log(`[Drive Sync] Created folder: "${FOLDER_NAME}" (id: ${folder.id})`);
-  return folder.id;
+
+  return promise;
 }
 
-/**
- * Automatically find or create the default database file in the "AI Site Collector" folder
- */
+let activeCreatePromise = null;
+
 async function getOrCreateDefaultDoc(token, skipIds = []) {
-  const DOC_NAME = 'AI_Site_Collector_Database.txt';
-  const TEXT_MIME = 'text/plain';
-  
-  // Resolve or create our dedicated folder first
-  const folderId = await getOrCreateFolder(token);
-  
-  // 1. Search Drive for our plain text file matching our document name INSIDE our folder
-  const q = encodeURIComponent(`name='${DOC_NAME}' and mimeType='${TEXT_MIME}' and '${folderId}' in parents and trashed=false`);
-  const searchResponse = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`,
-    { headers: { Authorization: 'Bearer ' + token } }
-  );
-  
-  if (!searchResponse.ok) {
-    if (searchResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    let errMsg = searchResponse.statusText;
-    try {
-      const errJson = await searchResponse.json();
-      if (errJson && errJson.error && errJson.error.message) {
-        errMsg = errJson.error.message;
-      }
-    } catch (e) {}
-    throw new Error(`Failed to search Drive: ${errMsg}`);
+  if (activeCreatePromise && skipIds.length === 0) {
+    console.log('[Drive Sync] Reusing active document creation promise to prevent duplicates.');
+    return activeCreatePromise;
   }
-  
-  const searchData = await searchResponse.json();
-  const files = (searchData.files || []).filter(f => f.mimeType === TEXT_MIME && !skipIds.includes(f.id));
-  
-  if (files.length > 0) {
-    // Found existing file — reuse it
-    const existingDoc = files[0];
-    await new Promise((resolve) => {
-      chrome.storage.local.set({ driveDocId: existingDoc.id, driveDocName: DOC_NAME }, resolve);
+
+  const promise = (async () => {
+    const DOC_NAME = 'AI_Site_Collector_Database';
+    const GDOC_MIME = 'application/vnd.google-apps.document';
+    
+    // Resolve or create our dedicated folder first
+    const folderId = await getOrCreateFolder(token);
+    
+    const stored = await new Promise(resolve => chrome.storage.local.get('driveDocName', resolve));
+    const docName = (stored.driveDocName || DOC_NAME).replace(/(\.txt|\.md)$/i, '').trim() || DOC_NAME;
+
+    // 1. Search for existing Google Doc inside our folder
+    const q = encodeURIComponent(`name='${docName}' and mimeType='${GDOC_MIME}' and '${folderId}' in parents and trashed=false`);
+    const searchResponse = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    
+    if (!searchResponse.ok) {
+      if (searchResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+      let errMsg = searchResponse.statusText;
+      try {
+        const errJson = await searchResponse.json();
+        if (errJson && errJson.error && errJson.error.message) {
+          errMsg = errJson.error.message;
+        }
+      } catch (e) {}
+      throw new Error(`Failed to search Drive: ${errMsg}`);
+    }
+    
+    const searchData = await searchResponse.json();
+    const files = (searchData.files || []).filter(f => !skipIds.includes(f.id));
+    
+    if (files.length > 0) {
+      const existingDoc = files[0];
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ driveDocId: existingDoc.id, driveDocName: docName }, resolve);
+      });
+      console.log(`[Drive Sync] Found existing Google Doc in folder: "${docName}" (id: ${existingDoc.id})`);
+      return existingDoc.id;
+    }
+    
+    // 2. Not found — create a new Google Doc inside our folder
+    console.log(`[Drive Sync] Creating new Google Doc in folder: "${docName}"`);
+    const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: docName,
+        mimeType: GDOC_MIME,
+        parents: [folderId]
+      })
     });
-    console.log(`[Drive Sync] Found existing database in folder: "${DOC_NAME}" (id: ${existingDoc.id})`);
-    return existingDoc.id;
+    
+    if (!createResponse.ok) {
+      if (createResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+      let errMsg = createResponse.statusText;
+      try {
+        const errJson = await createResponse.json();
+        if (errJson && errJson.error && errJson.error.message) {
+          errMsg = errJson.error.message;
+        }
+      } catch (e) {}
+      throw new Error(`Failed to create Google Doc: ${errMsg}`);
+    }
+    
+    const newFile = await createResponse.json();
+    const docId = newFile.id;
+
+    // Cache the ID immediately so concurrent checks/retries during initialization reuse it!
+    await new Promise((resolve) => {
+      chrome.storage.local.set({ driveDocId: docId, driveDocName: docName }, resolve);
+    });
+    
+    // Initial Doc Header via batchUpdate
+    const mainHeader = `AI Site Collector — Sync Database`;
+    const subHeader = `This document is auto-managed by the AI Site Collector extension.`;
+    const initialText = `${mainHeader}\n\n${subHeader}\n\n`;
+
+    const initResponse = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [
+          {
+            insertText: {
+              text: initialText,
+              endOfSegmentLocation: {
+                segmentId: ""
+              }
+            }
+          },
+          {
+            updateTextStyle: {
+              textStyle: {
+                bold: true,
+                fontSize: { magnitude: 16, unit: 'PT' }
+              },
+              fields: 'bold,fontSize',
+              range: {
+                startIndex: 1,
+                endIndex: 1 + mainHeader.length
+              }
+            }
+          },
+          {
+            updateTextStyle: {
+              textStyle: {
+                fontSize: { magnitude: 11, unit: 'PT' },
+                underline: true,
+                foregroundColor: {
+                  color: {
+                    rgbColor: { red: 0.8, green: 0.1, blue: 0.1 }
+                  }
+                }
+              },
+              fields: 'fontSize,underline,foregroundColor',
+              range: {
+                startIndex: 1 + mainHeader.length + 2,
+                endIndex: 1 + mainHeader.length + 2 + subHeader.length
+              }
+            }
+          },
+          {
+            updateParagraphStyle: {
+              paragraphStyle: {
+                lineSpacing: 150
+              },
+              fields: 'lineSpacing',
+              range: {
+                startIndex: 1,
+                endIndex: 1 + initialText.length
+              }
+            }
+          }
+        ]
+      })
+    });
+    
+    if (!initResponse.ok) {
+      if (initResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+      let errMsg = initResponse.statusText;
+      try {
+        const errJson = await initResponse.json();
+        if (errJson && errJson.error && errJson.error.message) {
+          errMsg = errJson.error.message;
+        }
+      } catch (e) {}
+      throw new Error(`Failed to initialize Google Doc: ${errMsg}`);
+    }
+    
+    console.log(`[Drive Sync] Created and initialized Google Doc: "${docName}" (id: ${docId})`);
+    return docId;
+  })();
+
+  if (skipIds.length === 0) {
+    activeCreatePromise = promise;
+    promise.finally(() => {
+      activeCreatePromise = null;
+    });
   }
-  
-  // 2. No file found — create a new one inside our folder
-  console.log(`[Drive Sync] Creating new plain text database in folder: "${DOC_NAME}"`);
-  const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + token,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      name: DOC_NAME,
-      mimeType: TEXT_MIME,
-      parents: [folderId]
-    })
-  });
-  
-  if (!createResponse.ok) {
-    if (createResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    let errMsg = createResponse.statusText;
-    try {
-      const errJson = await createResponse.json();
-      if (errJson && errJson.error && errJson.error.message) {
-        errMsg = errJson.error.message;
-      }
-    } catch (e) {}
-    throw new Error(`Failed to create database file: ${errMsg}`);
-  }
-  
-  const newFile = await createResponse.json();
-  const docId = newFile.id;
-  
-  // 3. Write the initial header into the new file using Drive upload media API
-  const initialContent = 'AI Site Collector — Sync Database\n\nThis document is auto-managed by the AI Site Collector extension.\n\n';
-  const initResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`, {
-    method: 'PATCH',
-    headers: { 
-      Authorization: 'Bearer ' + token, 
-      'Content-Type': 'text/plain' 
-    },
-    body: initialContent
-  });
-  
-  if (!initResponse.ok) {
-    if (initResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    let errMsg = initResponse.statusText;
-    try {
-      const errJson = await initResponse.json();
-      if (errJson && errJson.error && errJson.error.message) {
-        errMsg = errJson.error.message;
-      }
-    } catch (e) {}
-    throw new Error(`Failed to write header to database file: ${errMsg}`);
-  }
-  
-  await new Promise((resolve) => {
-    chrome.storage.local.set({ driveDocId: docId, driveDocName: DOC_NAME }, resolve);
-  });
-  
-  console.log(`[Drive Sync] Created new database: "${DOC_NAME}" (id: ${docId})`);
-  return docId;
+
+  return promise;
 }
 
 /**
@@ -673,45 +774,97 @@ function extractFeatures(site) {
  */
 function generateFullDatabaseContent(sites) {
   const timestamp = new Date().toLocaleString();
-  const line80 = '='.repeat(80);
-  let content = `AI Site Collector — Sync Database\n`;
-  content += `This document is auto-managed by the AI Site Collector extension.\n\n`;
-  content += `${line80}\n`;
-  content += `LATEST COLLECTION DATABASE | Last Sync: ${timestamp} | Total Sites: ${sites.length}\n`;
-  content += `${line80}\n\n`;
+  let content = `# AI Site Collector — Sync Database\n\n`;
+  content += `> This document is auto-managed by the AI Site Collector extension.\n\n`;
+  content += `---\n`;
+  content += `**LATEST COLLECTION DATABASE** | Last Sync: ${timestamp} | Total Sites: ${sites.length}\n`;
+  content += `---\n\n`;
 
   // Sort sites: newest saved first
   const sortedSites = [...sites].sort((a, b) => new Date(b.savedAt || b.timestamp) - new Date(a.savedAt || a.timestamp));
 
   sortedSites.forEach((site, index) => {
     const features = extractFeatures(site);
-    const category = site.classification.isAI ? 'AI Platform' : 'Useful Tool';
+    const category = (site.classification && site.classification.isAI) ? 'AI Platform' : 'Useful Tool';
     const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
     const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
+    const confidence = Math.round(((site.classification && site.classification.confidence) || 0) * 100);
 
-    content += `${index + 1}. ${site.title}\n`;
-    content += `   URL         : ${site.url}\n`;
-    content += `   Category    : ${category}\n`;
-    content += `   Description : ${cleanDesc}\n`;
+    content += `### ${index + 1}. [${site.title}](${site.url})\n`;
+    content += `- **URL**: [${site.url}](${site.url})\n`;
+    content += `- **Category**: ${category}\n`;
+    content += `- **Description**: ${cleanDesc}\n`;
     if (features.length > 0) {
-      content += `   Features    : ${features.join(', ')}\n`;
+      content += `- **Features**: ${features.join(', ')}\n`;
     }
-    content += `   Confidence  : ${Math.round((site.classification.confidence || 0) * 100)}%\n`;
-    content += `   Saved       : ${savedDate}\n\n`;
+    content += `- **Confidence**: ${confidence}%\n`;
+    content += `- **Saved**: ${savedDate}\n\n`;
   });
 
-  content += `${'='.repeat(80)}\n`;
   return content;
 }
 
 /**
  * Sync all sites to Google Drive by overwriting the file with the latest up-to-date formatted database
  */
+/**
+ * Format page description into clean, bulleted, sentence-based points
+ */
+function formatDescriptionAsPoints(desc) {
+  if (!desc) return '     • No description available.';
+  
+  const clean = desc.replace(/\n/g, ' ').trim();
+  const sentences = clean.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+  
+  const points = sentences
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .map(s => `     • ${s}`);
+    
+  return points.join('\n');
+}
+
+/**
+ * Audit existing content format in the Google Doc to detect legacy plain/markdown formats or formatting mismatches
+ */
+function doesDocMatchFormat(content, sites) {
+  if (!content || content.trim().length === 0) return true;
+  if (sites.length === 0) return true;
+
+  // Detect old markdown formats
+  if (content.includes('### ') || content.includes('**URL**') || content.includes('**Category**') || content.includes('**Description**')) {
+    console.log('[Format Audit] Detected legacy Markdown-style syntax in Google Doc.');
+    return false;
+  }
+
+  // Detect file extensions or legacy icons in text
+  if (content.includes('.txt') || content.includes('.md') || content.includes('📄')) {
+    console.log('[Format Audit] Detected legacy extensions or emojis in Google Doc text.');
+    return false;
+  }
+
+  // For each local site, if its URL is in the doc, check if it follows the exact structured prefix
+  for (const site of sites) {
+    if (content.includes(site.url)) {
+      const urlPattern = `   URL         : ${site.url}`;
+      if (!content.includes(urlPattern)) {
+        console.log(`[Format Audit] Site URL exists but does not match expected format pattern: "${urlPattern}".`);
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Append new sites to an existing Google Doc
+ */
 async function appendToDocument(token, docId, sites, skipIds = []) {
-  const TEXT_MIME = 'text/plain';
+  const GDOC_MIME = 'application/vnd.google-apps.document';
   let isDocValid = false;
 
-  // Verify that the stored docId is a valid, non-trashed plain text file
+  // Verify that the stored docId is a valid, non-trashed Google Doc
   if (docId && !skipIds.includes(docId)) {
     try {
       const fileCheckResponse = await fetch(
@@ -721,7 +874,7 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
       
       if (fileCheckResponse.ok) {
         const fileMeta = await fileCheckResponse.json();
-        if (fileMeta.mimeType === TEXT_MIME && !fileMeta.trashed) {
+        if (fileMeta.mimeType === GDOC_MIME && !fileMeta.trashed) {
           isDocValid = true;
         }
       }
@@ -730,57 +883,647 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
     }
   }
 
-  // If the stored document is not valid, trashed, or not correct MIME, recreate/rediscover one
+  // If the stored document is not valid, trashed, or not a Google Doc, recreate/rediscover one
   if (!isDocValid) {
-    console.log('[Drive Sync] Stored document is invalid, trashed, or not plain text. Recreating or auto-discovering...');
+    console.log('[Drive Sync] Stored document is invalid, trashed, or not a Google Doc. Recreating or auto-discovering...');
     const newDocId = await getOrCreateDefaultDoc(token, skipIds);
     docId = newDocId;
   }
 
-  // ── Step 1: Count how many unsynced sites are in this batch ──
-  const unsyncedSites = sites.filter(s => !s.synced);
-  const unsyncedCount = unsyncedSites.length;
+  // ── Step 1: Read current Google Doc content to deduplicate ──
+  let exportResponse = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${docId}/export?mimeType=text/plain`,
+    { headers: { Authorization: 'Bearer ' + token } }
+  );
 
-  // ── Step 2: Generate the complete formatted database content ──
-  const updatedContent = generateFullDatabaseContent(sites);
+  if (!exportResponse.ok) {
+    if (exportResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+    
+    // Self-healing: recreate new document if access denied
+    if (exportResponse.status === 403 || exportResponse.status === 404) {
+      console.log(`[Drive Sync] Access denied (status ${exportResponse.status}) to document ${docId}. Re-creating a new owned Google Doc...`);
+      const newSkipIds = [...skipIds, docId];
+      await new Promise(resolve => chrome.storage.local.set({ driveDocId: null }, resolve));
+      const newDocId = await getOrCreateDefaultDoc(token, newSkipIds);
+      return await appendToDocument(token, newDocId, sites, newSkipIds);
+    }
+    
+    throw new Error(`Failed to read Google Doc: ${exportResponse.statusText}`);
+  }
 
-  // ── Step 3: Overwrite the file content in Drive using upload media API ──
-  const updateResponse = await fetch(
-    `https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`,
-    {
-      method: 'PATCH',
-      headers: { 
-        Authorization: 'Bearer ' + token, 
-        'Content-Type': 'text/plain' 
+  const currentContent = await exportResponse.text();
+
+  // ── Step 2: Audit existing content format and rich metadata updates ──
+  const isFormatCorrect = doesDocMatchFormat(currentContent, sites);
+  
+  // Check if any site in storage is unsynced (needs sync) but its URL already exists in the document.
+  // This indicates the site was updated locally with richer metadata (description, features, etc.).
+  const hasMetadataUpdates = sites.some(site => !site.synced && currentContent.includes(site.url));
+
+  if (!isFormatCorrect || hasMetadataUpdates) {
+    if (hasMetadataUpdates) {
+      console.log('[Drive Sync] Rich metadata update (description/features) detected. Triggering self-healing full rebuild...');
+    } else {
+      console.log('[Drive Sync] Google Doc formatting mismatch detected. Triggering self-healing full rebuild...');
+    }
+    
+    // Fetch document structure to get accurate endIndex
+    const docResponse = await fetch(`https://docs.googleapis.com/v1/documents/${docId}`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!docResponse.ok) {
+      if (docResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+      throw new Error(`Failed to fetch document structure: ${docResponse.statusText}`);
+    }
+    const docData = await docResponse.json();
+    const bodyContent = docData.body && docData.body.content;
+    const lastElement = bodyContent && bodyContent[bodyContent.length - 1];
+    const endIndex = lastElement ? lastElement.endIndex : 1;
+
+    const insertIndex = 1;
+    const mainHeader = `AI Site Collector — Sync Database`;
+    const subHeader = `This document is auto-managed by the AI Site Collector extension.`;
+    let currentText = `${mainHeader}\n\n${subHeader}\n\n`;
+
+    const styleRequests = [];
+    
+    // Bold, 16pt main header
+    styleRequests.push({
+      updateTextStyle: {
+        textStyle: {
+          bold: true,
+          fontSize: { magnitude: 16, unit: 'PT' }
+        },
+        fields: 'bold,fontSize',
+        range: {
+          startIndex: 1,
+          endIndex: 1 + mainHeader.length
+        }
+      }
+    });
+
+    // 11pt, red, underlined sub header
+    styleRequests.push({
+      updateTextStyle: {
+        textStyle: {
+          fontSize: { magnitude: 11, unit: 'PT' },
+          underline: true,
+          foregroundColor: {
+            color: {
+              rgbColor: { red: 0.8, green: 0.1, blue: 0.1 }
+            }
+          }
+        },
+        fields: 'fontSize,underline,foregroundColor',
+        range: {
+          startIndex: 1 + mainHeader.length + 2,
+          endIndex: 1 + mainHeader.length + 2 + subHeader.length
+        }
+      }
+    });
+
+    // Rebuild chronologically (oldest first)
+    const sortedSites = [...sites].sort((a, b) => new Date(a.savedAt || a.timestamp) - new Date(b.savedAt || b.timestamp));
+
+    sortedSites.forEach((site, i) => {
+      const features = extractFeatures(site);
+      const category = (site.classification && site.classification.isAI) ? 'AI Platform' : 'Useful Tool';
+      const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
+      const descPoints = formatDescriptionAsPoints(cleanDesc);
+      const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
+
+      const titlePrefix = `${i + 1}. `;
+      const titleLine = `${titlePrefix}${site.title}\n`;
+      
+      const urlLine = `   URL         : ${site.url}\n`;
+      const typeLine = `   Type        : ${category}\n`;
+      const descLine = `   Description :\n${descPoints}\n`;
+      let featuresLine = "";
+      if (features.length > 0) {
+        featuresLine = `   Features    : ${features.join(', ')}\n`;
+      }
+      const savedLine = `   Saved       : ${savedDate}\n\n`;
+
+      // Title Start & End
+      const titleStart = currentText.length;
+      currentText += titleLine;
+      const titleEnd = currentText.length;
+
+      // Style Title: bold, 14pt, underline if AI
+      const isAI = site.classification && site.classification.isAI;
+      styleRequests.push({
+        updateTextStyle: {
+          textStyle: {
+            bold: true,
+            fontSize: { magnitude: 14, unit: 'PT' },
+            underline: isAI ? true : false
+          },
+          fields: 'bold,fontSize,underline',
+          range: {
+            startIndex: insertIndex + titleStart,
+            endIndex: insertIndex + titleEnd - 1 // exclude trailing newline from styling
+          }
+        }
+      });
+
+      const detailsStart = currentText.length;
+
+      // 1. URL Line
+      const urlStart = currentText.length;
+      const urlLabelStart = urlStart + "   ".length;
+      const urlLabelEnd = urlLabelStart + "URL".length;
+      const urlValueStart = urlStart + "   URL         : ".length;
+      const urlValueEnd = urlStart + `   URL         : ${site.url}`.length;
+      currentText += urlLine;
+
+      // 2. Type Line
+      const typeStart = currentText.length;
+      const typeLabelStart = typeStart + "   ".length;
+      const typeLabelEnd = typeLabelStart + "Type".length;
+      currentText += typeLine;
+
+      // 3. Description Line
+      const descStart = currentText.length;
+      const descLabelStart = descStart + "   ".length;
+      const descLabelEnd = descLabelStart + "Description".length;
+      currentText += descLine;
+
+      // 4. Features Line
+      let featuresStart = null;
+      let featuresLabelStart = null;
+      let featuresLabelEnd = null;
+      if (featuresLine) {
+        featuresStart = currentText.length;
+        featuresLabelStart = featuresStart + "   ".length;
+        featuresLabelEnd = featuresLabelStart + "Features".length;
+        currentText += featuresLine;
+      }
+
+      // 5. Saved Line
+      const savedStart = currentText.length;
+      const savedEnd = savedStart + savedLine.length;
+      currentText += savedLine;
+
+      const detailsEnd = currentText.length;
+
+      // Apply baseline Details style (font size 12, normal weight, normal style)
+      styleRequests.push({
+        updateTextStyle: {
+          textStyle: {
+            bold: false,
+            italic: false,
+            underline: false,
+            fontSize: { magnitude: 12, unit: 'PT' },
+            foregroundColor: {
+              color: {
+                rgbColor: { red: 0.0, green: 0.0, blue: 0.0 }
+              }
+            }
+          },
+          fields: 'bold,italic,underline,fontSize,foregroundColor',
+          range: {
+            startIndex: insertIndex + detailsStart,
+            endIndex: insertIndex + detailsEnd
+          }
+        }
+      });
+
+      // Apply URL Label Italic style
+      styleRequests.push({
+        updateTextStyle: {
+          textStyle: { italic: true },
+          fields: 'italic',
+          range: {
+            startIndex: insertIndex + urlLabelStart,
+            endIndex: insertIndex + urlLabelEnd
+          }
+        }
+      });
+
+      // Apply URL Value Hyperlink style (bold, underline, blue, clickable)
+      styleRequests.push({
+        updateTextStyle: {
+          textStyle: {
+            bold: true,
+            underline: true,
+            link: { url: site.url },
+            foregroundColor: {
+              color: {
+                rgbColor: {
+                  red: 0.0627451,
+                  green: 0.3019608,
+                  blue: 0.5843137
+                }
+              }
+            }
+          },
+          fields: 'bold,underline,link,foregroundColor',
+          range: {
+            startIndex: insertIndex + urlValueStart,
+            endIndex: insertIndex + urlValueEnd
+          }
+        }
+      });
+
+      // Apply Type Label Italic style
+      styleRequests.push({
+        updateTextStyle: {
+          textStyle: { italic: true },
+          fields: 'italic',
+          range: {
+            startIndex: insertIndex + typeLabelStart,
+            endIndex: insertIndex + typeLabelEnd
+          }
+        }
+      });
+
+      // Apply Description Label Italic style
+      styleRequests.push({
+        updateTextStyle: {
+          textStyle: { italic: true },
+          fields: 'italic',
+          range: {
+            startIndex: insertIndex + descLabelStart,
+            endIndex: insertIndex + descLabelEnd
+          }
+        }
+      });
+
+      // Apply Features Label Italic style (if exists)
+      if (featuresLine) {
+        styleRequests.push({
+          updateTextStyle: {
+            textStyle: { italic: true },
+            fields: 'italic',
+            range: {
+              startIndex: insertIndex + featuresLabelStart,
+              endIndex: insertIndex + featuresLabelEnd
+            }
+          }
+        });
+      }
+
+      // Apply Saved Line Italic style (the entire line including value)
+      styleRequests.push({
+        updateTextStyle: {
+          textStyle: { italic: true },
+          fields: 'italic',
+          range: {
+            startIndex: insertIndex + savedStart,
+            endIndex: insertIndex + savedEnd - 2 // exclude trailing double newline
+          }
+        }
+      });
+    });
+
+    const deleteRequest = endIndex > 2 ? [{
+      deleteContentRange: {
+        range: {
+          startIndex: 1,
+          endIndex: endIndex - 1
+        }
+      }
+    }] : [];
+
+    const insertRequest = [{
+      insertText: {
+        text: currentText,
+        location: {
+          index: insertIndex
+        }
+      }
+    }];
+
+    // Apply line spacing of 1.5 to the entire rebuilt block
+    styleRequests.push({
+      updateParagraphStyle: {
+        paragraphStyle: {
+          lineSpacing: 150
+        },
+        fields: 'lineSpacing',
+        range: {
+          startIndex: insertIndex,
+          endIndex: insertIndex + currentText.length
+        }
+      }
+    });
+
+    const finalRequests = [...deleteRequest, ...insertRequest, ...styleRequests];
+
+    const updateResponse = await fetch(
+      `https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: finalRequests })
+      }
+    );
+
+    if (!updateResponse.ok) {
+      if (updateResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+      
+      if (updateResponse.status === 403 || updateResponse.status === 404) {
+        console.log(`[Drive Sync] Access denied (status ${updateResponse.status}) on update to document ${docId}. Re-creating a new owned Google Doc...`);
+        const newSkipIds = [...skipIds, docId];
+        await new Promise(resolve => chrome.storage.local.set({ driveDocId: null }, resolve));
+        const newDocId = await getOrCreateDefaultDoc(token, newSkipIds);
+        return await appendToDocument(token, newDocId, sites, newSkipIds);
+      }
+      
+      throw new Error(`Failed to update Google Doc: ${updateResponse.statusText}`);
+    }
+
+    return sites.length;
+  }
+
+  // ── Step 3: Filter to only brand-new sites not already in the document ──
+  const newSites = sites.filter(site => !currentContent.includes(site.url));
+  if (newSites.length === 0) {
+    return 0; // All sites already synced
+  }
+
+  // ── Step 3: Fetch current document structure to obtain the exact endIndex ──
+  const docResponse = await fetch(`https://docs.googleapis.com/v1/documents/${docId}`, {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  if (!docResponse.ok) {
+    if (docResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+    throw new Error(`Failed to fetch document structure: ${docResponse.statusText}`);
+  }
+  const docData = await docResponse.json();
+  const bodyContent = docData.body && docData.body.content;
+  const lastElement = bodyContent && bodyContent[bodyContent.length - 1];
+  const endIndex = lastElement ? lastElement.endIndex : 1;
+  const insertIndex = endIndex > 1 ? endIndex - 1 : 1;
+
+  // ── Step 4: Build the text block and calculate styling offsets ──
+  const timestamp = new Date().toLocaleString();
+  let currentText = `\n\n${'='.repeat(60)}\nSYNC UPDATE — ${timestamp} | ${newSites.length} new site(s)\n${'='.repeat(60)}\n\n`;
+
+  const headerLine = `SYNC UPDATE — ${timestamp} | ${newSites.length} new site(s)`;
+  const headerStart = `\n\n${'='.repeat(60)}\n`.length;
+  const headerEnd = headerStart + headerLine.length;
+
+  const requests = [];
+
+  // Add bold styling for the SYNC UPDATE header
+  requests.push({
+    updateTextStyle: {
+      textStyle: {
+        bold: true
       },
-      body: updatedContent
+      fields: 'bold',
+      range: {
+        startIndex: insertIndex + headerStart,
+        endIndex: insertIndex + headerEnd
+      }
+    }
+  });
+
+  newSites.forEach((site, i) => {
+    const features = extractFeatures(site);
+    const category = (site.classification && site.classification.isAI) ? 'AI Platform' : 'Useful Tool';
+    const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
+    const descPoints = formatDescriptionAsPoints(cleanDesc);
+    const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
+
+    // Line 1: Title line
+    const titlePrefix = `${i + 1}. `;
+    const titleLine = `${titlePrefix}${site.title}\n`;
+    
+    const urlLine = `   URL         : ${site.url}\n`;
+    const typeLine = `   Type        : ${category}\n`;
+    const descLine = `   Description :\n${descPoints}\n`;
+    let featuresLine = "";
+    if (features.length > 0) {
+      featuresLine = `   Features    : ${features.join(', ')}\n`;
+    }
+    const savedLine = `   Saved       : ${savedDate}\n\n`;
+
+    // Title Start & End
+    const titleStart = currentText.length;
+    currentText += titleLine;
+    const titleEnd = currentText.length;
+
+    // Style Title: bold, 14pt, underline if AI
+    const isAI = site.classification && site.classification.isAI;
+    requests.push({
+      updateTextStyle: {
+        textStyle: {
+          bold: true,
+          fontSize: { magnitude: 14, unit: 'PT' },
+          underline: isAI ? true : false
+        },
+        fields: 'bold,fontSize,underline',
+        range: {
+          startIndex: insertIndex + titleStart,
+          endIndex: insertIndex + titleEnd - 1
+        }
+      }
+    });
+
+    const detailsStart = currentText.length;
+
+    // 1. URL Line
+    const urlStart = currentText.length;
+    const urlLabelStart = urlStart + "   ".length;
+    const urlLabelEnd = urlLabelStart + "URL".length;
+    const urlValueStart = urlStart + "   URL         : ".length;
+    const urlValueEnd = urlStart + `   URL         : ${site.url}`.length;
+    currentText += urlLine;
+
+    // 2. Type Line
+    const typeStart = currentText.length;
+    const typeLabelStart = typeStart + "   ".length;
+    const typeLabelEnd = typeLabelStart + "Type".length;
+    currentText += typeLine;
+
+    // 3. Description Line
+    const descStart = currentText.length;
+    const descLabelStart = descStart + "   ".length;
+    const descLabelEnd = descLabelStart + "Description".length;
+    currentText += descLine;
+
+    // 4. Features Line
+    let featuresStart = null;
+    let featuresLabelStart = null;
+    let featuresLabelEnd = null;
+    if (featuresLine) {
+      featuresStart = currentText.length;
+      featuresLabelStart = featuresStart + "   ".length;
+      featuresLabelEnd = featuresLabelStart + "Features".length;
+      currentText += featuresLine;
+    }
+
+    // 5. Saved Line
+    const savedStart = currentText.length;
+    const savedEnd = savedStart + savedLine.length;
+    currentText += savedLine;
+
+    const detailsEnd = currentText.length;
+
+    // Apply baseline Details style (font size 12, normal weight, normal style)
+    requests.push({
+      updateTextStyle: {
+        textStyle: {
+          bold: false,
+          italic: false,
+          underline: false,
+          fontSize: { magnitude: 12, unit: 'PT' },
+          foregroundColor: {
+            color: {
+              rgbColor: { red: 0.0, green: 0.0, blue: 0.0 }
+            }
+          }
+        },
+        fields: 'bold,italic,underline,fontSize,foregroundColor',
+        range: {
+          startIndex: insertIndex + detailsStart,
+          endIndex: insertIndex + detailsEnd
+        }
+      }
+    });
+
+    // Apply URL Label Italic style
+    requests.push({
+      updateTextStyle: {
+        textStyle: { italic: true },
+        fields: 'italic',
+        range: {
+          startIndex: insertIndex + urlLabelStart,
+          endIndex: insertIndex + urlLabelEnd
+        }
+      }
+    });
+
+    // Apply URL Value Hyperlink style (bold, underline, blue, clickable)
+    requests.push({
+      updateTextStyle: {
+        textStyle: {
+          bold: true,
+          underline: true,
+          link: { url: site.url },
+          foregroundColor: {
+            color: {
+              rgbColor: {
+                red: 0.0627451,
+                green: 0.3019608,
+                blue: 0.5843137
+              }
+            }
+          }
+        },
+        fields: 'bold,underline,link,foregroundColor',
+        range: {
+          startIndex: insertIndex + urlValueStart,
+          endIndex: insertIndex + urlValueEnd
+        }
+      }
+    });
+
+    // Apply Type Label Italic style
+    requests.push({
+      updateTextStyle: {
+        textStyle: { italic: true },
+        fields: 'italic',
+        range: {
+          startIndex: insertIndex + typeLabelStart,
+          endIndex: insertIndex + typeLabelEnd
+        }
+      }
+    });
+
+    // Apply Description Label Italic style
+    requests.push({
+      updateTextStyle: {
+        textStyle: { italic: true },
+        fields: 'italic',
+        range: {
+          startIndex: insertIndex + descLabelStart,
+          endIndex: insertIndex + descLabelEnd
+        }
+      }
+    });
+
+    // Apply Features Label Italic style (if exists)
+    if (featuresLine) {
+      requests.push({
+        updateTextStyle: {
+          textStyle: { italic: true },
+          fields: 'italic',
+          range: {
+            startIndex: insertIndex + featuresLabelStart,
+            endIndex: insertIndex + featuresLabelEnd
+          }
+        }
+      });
+    }
+
+    // Apply Saved Line Italic style (the entire line including value)
+    requests.push({
+      updateTextStyle: {
+        textStyle: { italic: true },
+        fields: 'italic',
+        range: {
+          startIndex: insertIndex + savedStart,
+          endIndex: insertIndex + savedEnd - 2
+        }
+      }
+    });
+  });
+
+  const footerText = `${'─'.repeat(60)}\n`;
+  currentText += footerText;
+
+  // Apply line spacing of 1.5 to the entire appended block
+  requests.push({
+    updateParagraphStyle: {
+      paragraphStyle: {
+        lineSpacing: 150
+      },
+      fields: 'lineSpacing',
+      range: {
+        startIndex: insertIndex,
+        endIndex: insertIndex + currentText.length
+      }
+    }
+  });
+
+  // Prepend the insertText request so it runs first in the batchUpdate
+  requests.unshift({
+    insertText: {
+      text: currentText,
+      location: {
+        index: insertIndex
+      }
+    }
+  });
+
+  // ── Step 5: Append to the Google Doc using Docs API batchUpdate ──
+  const updateResponse = await fetch(
+    `https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`,
+    {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests })
     }
   );
 
   if (!updateResponse.ok) {
     if (updateResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
     
-    // Self-healing: if 403 or 404 occurs on update, force recreate a new default document!
     if (updateResponse.status === 403 || updateResponse.status === 404) {
-      console.log(`[Drive Sync] Access denied (status ${updateResponse.status}) on update to document ${docId}. Re-creating a new owned database...`);
+      console.log(`[Drive Sync] Access denied (status ${updateResponse.status}) on update to document ${docId}. Re-creating a new owned Google Doc...`);
       const newSkipIds = [...skipIds, docId];
-      // Clear storage
       await new Promise(resolve => chrome.storage.local.set({ driveDocId: null }, resolve));
       const newDocId = await getOrCreateDefaultDoc(token, newSkipIds);
       return await appendToDocument(token, newDocId, sites, newSkipIds);
     }
     
-    let errMsg = updateResponse.statusText;
-    try {
-      const errJson = await updateResponse.json();
-      if (errJson && errJson.error && errJson.error.message) {
-        errMsg = errJson.error.message;
-      }
-    } catch (e) {}
-    throw new Error(`Failed to update database file: ${errMsg}`);
+    throw new Error(`Failed to update Google Doc: ${updateResponse.statusText}`);
   }
 
-  return unsyncedCount > 0 ? unsyncedCount : (sites.length > 0 ? 1 : 0);
+  return newSites.length;
 }
 
 /**
@@ -794,8 +1537,8 @@ function generateCSV(sites) {
       `"${site.title.replace(/"/g, '""')}"`,
       `"${site.url}"`,
       `"${site.description.replace(/"/g, '""')}"`,
-      site.classification.isAI ? 'AI' : 'Useful',
-      `${(site.classification.confidence * 100).toFixed(0)}%`,
+      (site.classification && site.classification.isAI) ? 'AI' : 'Useful',
+      `${(((site.classification && site.classification.confidence) || 0) * 100).toFixed(0)}%`,
       `"${features.join(', ')}"`,
       new Date(site.savedAt).toLocaleString()
     ];

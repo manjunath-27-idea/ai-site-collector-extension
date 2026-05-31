@@ -1,6 +1,20 @@
 # AI Site Collector — Chrome Extension
 
-> Automatically detects, classifies, and saves AI & useful websites to a **Google Doc** in your Drive — hands-free, with real-time notifications and a widescreen dashboard.
+> Automatically detects, classifies, and saves AI & useful websites to a dedicated text database file inside your personal **Google Drive** — hands-free, with real-time notifications and a widescreen dashboard.
+
+---
+
+## Recent Updates (v3.3.0)
+
+Our latest update brings significant performance, visual, and stability enhancements:
+
+*   **Dedicated Google Drive Folder:** Stores your database inside a dedicated folder named `AI Site Collector` to keep your Google Drive root clean and organized.
+*   **Markdown Database (.md):** Syncs directly to a plain-text Markdown file named `AI_Site_Collector_Database.md` inside the folder. This ensures the database file is native, lightweight, and instantly openable/editable directly in Drive with styled rendering.
+*   **Continuous Site Upgrades:** Automatically marks records as `synced: false` and triggers a Drive update if an existing site is rescanned with richer description metadata or new feature tags.
+*   **Dynamic Sync Status indicators:** Options sidebar and Popup sync buttons dynamically change color (vibrant green `#22c55e` when fully synced, orange `#f97316` when unsynced). 
+*   **Green Checkmark Badge:** Sync buttons display an orange count badge for pending sites, which dynamically updates to a green checkmark `✓` when fully synced.
+*   **MV3 Notification Crash Resolution:** Declared extension icons in `web_accessible_resources` and added safe background workers callbacks to prevent image loading crashes.
+*   **Safe Classification Guards:** Guarded all `site.classification` references to support old or custom-entered site records that lack classification properties, preventing extension crashes.
 
 ---
 
@@ -9,18 +23,17 @@
 | Feature | Status |
 |---|---|
 | Intelligent multi-step AI classifier | ✅ Active |
-| Static knowledge base (500+ AI sites) | ✅ Active |
+| Dedicated Folder storage (`AI Site Collector`) | ✅ Active |
+| Plain text Markdown format (`.md`) | ✅ Active |
 | Dynamic domain rules from GitHub | ✅ Active |
-| Google Docs sync (`.gdoc` format only) | ✅ Active |
 | Auto-sync on site discovery | ✅ Active |
-| Desktop notifications | ✅ Active |
+| Settings persist across extension reloads | ✅ Fixed |
+| Dynamic Orange/Green Tick Sync Indicators | ✅ Active |
 | Widescreen Options Dashboard | ✅ Active |
 | Custom keyword scanner | ✅ Active |
-| Self-healing OAuth token refresh | ✅ Active |
+| Self-healing OAuth token refresh & recovery | ✅ Active |
 | Dark mode | ✅ Active |
 | Dual brand/domain name support | ✅ Active |
-| Settings persist across reloads | ✅ Fixed |
-| Cybersecurity / pentest site detection | ✅ Active |
 
 ---
 
@@ -48,11 +61,11 @@ On install, update, and browser startup, `background.js` fetches `domain_rules.j
 These are merged with the static KB in `content.js` at scan time.
 
 ### STEP 3 — AI-Centric TLD Corroboration
-Domains ending in `.ai`, `.bot`, `.chat`, or `.agent` are checked for corroborating content signals (e.g. mentions of `generative`, `llm`, `chatbot`, `machine learning`, `agentic`, `pentest`, `cybersecurity`). A match earns `isAI = true` with `0.80` confidence.
+Domains ending in `.ai`, `.bot`, `.chat`, or `.agent` are checked for corroborating content signals (e.g. generative AI, machine learning, agentic, pentest, cybersecurity mentions). A match earns `isAI = true` with `0.80` confidence.
 
 ### STEP 4 — Weighted Keyword Scoring
 Full page text (title + description + meta keywords + URL path) is scored against two weighted keyword lists:
-- **AI Keywords:** `ai`, `artificial intelligence`, `gpt`, `llm`, `chatbot`, `generative`, `agentic`, `autonomous`, `machine learning`, `neural`, `transformer`, etc.
+- **AI Keywords:** `ai`, `artificial intelligence`, `gpt`, `llm`, `chatbot`, `generative`, `agentic`, `autonomous`, `machine learning`, etc.
 - **Useful Keywords:** `developer tool`, `open source`, `framework`, `library`, `pentest`, `cybersecurity`, `penetration testing`, `security scanner`, etc.
 
 Sites scoring above threshold are classified accordingly.
@@ -62,65 +75,25 @@ Any page matching known auth gateways or login URL patterns (`/login`, `/auth`, 
 
 ---
 
-## Google Drive Integration (Google Docs Only)
+## Google Drive Integration (Plain Text File in Folder)
 
-All sync operations exclusively use **Google Docs format** (`application/vnd.google-apps.document`). No `.txt` files are ever created or accepted.
+All sync operations utilize a **standard plain-text file** (`text/plain` MIME type) placed inside a dedicated folder named **`AI Site Collector`** in your personal Google Drive. 
+
+### Folder Organization
+To keep your Google Drive root directory clean, the extension automatically discovers or creates a parent folder named `AI Site Collector` and restricts all search and file operations inside this specific folder.
+
+### Active Sync Database File
+The primary database file is named `AI_Site_Collector_Database.md`. Storing as a `.md` file guarantees that the database is native, light, and instantly openable and editable directly within Google Drive or any text editor.
 
 ### Auto-Discovery
 On first sync, the extension:
-1. Queries Drive API for `name='AI_Site_Collector_Database' and mimeType='application/vnd.google-apps.document'`
-2. Reuses the existing doc if found
-3. Creates a new Google Doc if not found, writes a header, and saves the `docId` to storage
+1. Resolves or creates the parent folder named `AI Site Collector`.
+2. Searches inside this folder for a plain-text file named `AI_Site_Collector_Database.md`.
+3. Reuses the existing file if found.
+4. Creates a new plain-text file inside the folder if not found, initializes it with a header, and caches the folder and file IDs.
 
-### Append-Only Deduplication
-Before writing, the extension exports the Google Doc as plain text and filters out any site whose URL already appears in the document. Only **brand-new sites** are appended.
-
-### Document Format (each sync)
-```
-============================================================
-SYNC UPDATE — 29/05/2026, 1:30:00 pm | 3 new site(s)
-============================================================
-
-1. ChatGPT
-   URL         : https://chatgpt.com/
-   Type        : AI Platform
-   Description : ChatGPT is an AI-powered assistant by OpenAI...
-   Features    : chatbot, llm, generative, free, api
-   Saved       : 29/05/2026, 1:28:00 pm
-
-──────────────────────────────────────────────────────────
-```
-
-### Self-Healing OAuth Token Refresh
-When a `401 Unauthorized` error is returned from Drive/Docs API (tokens expire after ~1 hour):
-1. Extension silently removes the stale token via `chrome.identity.removeCachedAuthToken`
-2. Requests a fresh token silently via `chrome.identity.getAuthToken({ interactive: false })`
-3. Retries the sync automatically — no user action required
-
----
-
-## Settings (persist across extension reloads)
-
-| Setting | Default | Stored As |
-|---|---|---|
-| Auto-sync to Drive | ON | `autoSyncSetting` |
-| Show notifications | ON | `notificationsSetting` |
-| Dark mode | OFF | `darkModeSetting` |
-
-> **Fixed in v3.1:** Settings are only reset on **first install** (`reason === 'install'`). Extension updates and developer-mode reloads no longer overwrite user preferences.
-
----
-
-## Custom Keyword Scanner
-
-Add your own keywords to detect sites the built-in classifier might miss:
-
-1. Open the **Settings modal** (popup) or **Options Dashboard**
-2. Under **Custom Site Finding Keywords**, type a keyword (e.g. `langchain`, `n8n`, `zapier`)
-3. Select category: **AI Site** or **Useful Site**
-4. Click **Add**
-
-The `content.js` scanner reads `customAiKeywords` and `customUsefulKeywords` from storage on every page load and merges them into the scoring pipeline.
+### Overwrite-Sync & Continuous Upgrades
+The extension synchronizes local records to Google Drive by sorting all collected sites (newest first) and writing the fully compiled up-to-date database structure. If a scanned site already exists in storage but is saved with enriched descriptions or new features, the extension marks it as `synced: false` and automatically updates the database in Drive.
 
 ---
 
@@ -134,17 +107,17 @@ ai-site-collector-ext/
 │   ├── content.js              # Classifier: 5-step detection pipeline + KB
 │   └── background.js           # Service worker: storage, Drive API, OAuth
 ├── popup/
-│   ├── index.html              # Popup UI: site list, settings modal, auth
-│   ├── styles.css              # Glassmorphism toggles, dark theme
+│   ├── index.html              # Popup UI: site list, settings, auth, sync badges
+│   ├── styles.css              # Glassmorphism toggles, sync cycle coloring
 │   └── popup.js                # Popup logic: filter, sync, settings, keywords
 ├── options/
 │   ├── index.html              # Widescreen dashboard
-│   ├── styles.css              # Grid layout, responsive cards
+│   ├── styles.css              # Grid layout, responsive cards, sync cycle badges
 │   └── options.js              # Dashboard: search, delete, export, settings
 ├── icons/
-│   ├── icon-16.png
-│   ├── icon-48.png
-│   └── icon-128.png
+│   ├── icon-16.png             # Declared web-accessible assets
+│   ├── icon-48.png             # Declared web-accessible assets
+│   └── icon-128.png            # Declared web-accessible assets
 ├── README.md
 ├── FEATURES.md
 ├── UPDATE_NOTES.md
@@ -155,71 +128,71 @@ ai-site-collector-ext/
 
 ---
 
-## Installation
+## Installation & Setup Guide
 
 ### Prerequisites
-- Google Chrome 88+ (or Chromium-based: Edge, Brave, Opera)
-- Google account for Drive sync
+- Google Chrome 88+ (or Chromium-based browsers: Edge, Brave, Opera)
+- A Google account to sync collections with your Google Drive
 
-### Setup Steps
+### Detailed Setup Steps
 
-1. **Clone or download the repository**
-   ```bash
-   git clone https://github.com/manjunath-27-idea/ai-site-collector-extension.git
-   ```
+1.  **Download the Extension:**
+    *   Download and extract the zip archive of the repository, or clone the repository directly using Git:
+        ```bash
+        git clone https://github.com/manjunath-27-idea/ai-site-collector-extension.git
+        ```
 
-2. **Configure Google OAuth** (see `SETUP_OAUTH.md` for full walkthrough)
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a project → Enable **Google Drive API** + **Google Docs API**
-   - Create OAuth 2.0 credentials (Chrome App type)
-   - Copy your Client ID
+2.  **Configure Google OAuth Credentials:**
+    *   Follow the comprehensive guide in `SETUP_OAUTH.md` to register your own OAuth client.
+    *   Go to the [Google Cloud Console](https://console.cloud.google.com/).
+    *   Create a project and enable the **Google Drive API**.
+    *   Configure the OAuth Consent Screen and create an **OAuth Client ID** (select **Chrome Extension** or **Web Application** type).
+    *   Copy the generated Client ID.
 
-3. **Update `manifest.json`**
-   ```json
-   "oauth2": {
-     "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com"
-   }
-   ```
+3.  **Update `manifest.json`:**
+    *   Open `manifest.json` in the root of the extension folder.
+    *   Locate the `"oauth2"` block and replace the `"client_id"` value with your copied Client ID:
+        ```json
+        "oauth2": {
+          "client_id": "YOUR_COPIED_CLIENT_ID.apps.googleusercontent.com",
+          "scopes": [ ... ]
+        }
+        ```
 
-4. **Load in Chrome**
-   - Open `chrome://extensions/`
-   - Enable **Developer mode**
-   - Click **Load unpacked** → select the extension folder
+4.  **Load the Extension in Developer Mode:**
+    *   Open a new tab in Google Chrome and navigate to `chrome://extensions/`.
+    *   In the top-right corner, toggle the **Developer mode** switch to **ON**.
+    *   In the top-left corner, click the **Load unpacked** button.
+    *   Select the extracted `ai-site-collector-ext` folder. The extension is now successfully installed.
 
-5. **Sign in**
-   - Click the extension icon → **Sign in with Google**
-   - Grant Drive and Docs permissions
-
----
-
-## Usage
-
-### Automatic Detection
-Just browse normally. The extension scans every page in the background and saves AI/useful sites automatically.
-
-### Popup
-- See recently collected sites with descriptions, type badges, and confidence scores
-- Filter: **All / AI / Useful**
-- Toggle **Auto-sync**, **Notifications**, **Dark mode**
-- Manually **Sync to Drive**
-- Open the **Widescreen Dashboard**
-
-### Widescreen Dashboard
-- Real-time live search across all collected sites
-- Category filtering
-- Individual site card deletion (`×`)
-- Custom keyword CRUD manager
-- Account settings and sync controls
+5.  **Authenticate & Establish Google Drive Link:**
+    *   Click on the **Extensions Puzzle Piece** icon in your Chrome toolbar and pin **AI Site Collector**.
+    *   Click the extension icon to open the popup interface.
+    *   Click **Sign in with Google**.
+    *   Complete the OAuth consent screen using your Google account to grant file access.
+    *   Once authenticated, the extension will automatically connect or initialize your `AI_Site_Collector_Database.md` inside the `AI Site Collector` folder in your Drive.
 
 ---
 
-## Privacy & Security
+## How to Use the Extension
 
-- All data stored locally on your device (`chrome.storage.local`)
-- Google Drive sync uses OAuth 2.0 — your password is never stored
-- No third-party analytics or tracking
-- Only writes to one specific Google Doc (`AI_Site_Collector_Database`)
-- Login/auth pages are never captured
+### 1. Hands-Free Website Scanning
+Just browse the web normally. Whenever you load a page:
+*   The extension analyzes the metadata, headers, structures, and keywords in the background.
+*   If classified as an AI Platform or a Useful Tool, it adds the record locally and shows a desktop notification.
+*   If **Auto-sync to Google Drive** is ON, the database in your Google Drive folder is updated instantly.
+
+### 2. Dashboard Management
+Right-click the extension icon and select **Options** (or click **Settings & Dashboard** in the popup) to open the widescreen interface:
+*   **Search Bar:** Live search through titles, descriptions, and feature tags.
+*   **Navigation Tabs:** Toggle between **Collected Sites**, **Custom Keywords**, and **Settings & Drive**.
+*   **Custom Keywords CRUD:** Add custom keywords to classify specific pages (e.g. adding `langchain` as an AI Site, or `n8n` as a Useful Site).
+*   **Individual Deletion:** Click the `×` button on any site card to instantly remove it from your local storage and cloud database file.
+
+### 3. Manual Sync & Status indicators
+*   If you toggle **Auto-sync** OFF, the sync badges on the Dashboard sidebar and in the Popup will display an orange circle with the count of pending sites (e.g. `3`).
+*   Click either sync cycle button to trigger a manual sync.
+*   Once synced, the button and the cycle SVG icon turn green, and the orange badge resolves into a green checkmark `✓` badge representing that everything is fully up to date.
 
 ---
 
@@ -227,23 +200,25 @@ Just browse normally. The extension scans every page in the background and saves
 
 | Problem | Solution |
 |---|---|
-| Extension not detecting sites | Refresh the page, wait 2–3 s for scan |
-| Sync failed error | Re-authenticate via popup; check Drive API is enabled |
-| Settings reset after reload | Update to v3.1+ (fixed — preferences now survive reloads) |
-| Sync shows "already up to date" | All detected sites already exist in the Google Doc |
-| Google Doc not found | Extension auto-creates one on next sync |
-| Notifications not showing | Toggle "Show notifications" OFF then ON again |
+| Extension not detecting sites | Refresh the page and wait 2 seconds. The script runs on `document_idle` to avoid slowing down your page. |
+| Sync is failing | Make sure you have active internet. Try to log out (Sign Out) and Sign In again to refresh expired tokens. |
+| Count badges don't decrease or turn green | Check if you have older sites in storage that crash the formatter. Upgrading to `v3.3.0` resolves this via safe classification check guards. |
+| Active Database shows "No document selected" | Authenticate first via the popup. The extension will auto-discover or create the file for you. |
+| Google Drive folder/file not showing | Verify you logged in with the correct Google account. Open Google Drive, locate the `AI Site Collector` folder, and open `AI_Site_Collector_Database.md`. |
+| Notifications not firing | Make sure Chrome is allowed to send notifications in your Operating System settings and that the "Show notifications" toggle is ON. |
 
 ---
 
-## Tech Stack
+## Technical Stack & Permissions
 
-- **Vanilla JavaScript** (no frameworks, fully offline classification)
-- **Chrome Extensions MV3** (service worker + content scripts)
-- **Chrome Storage API** — local persistence + reactive `onChanged` sync
-- **Google Drive API v3** — file search and metadata
-- **Google Docs API v1** — document read (export) and write (`batchUpdate`)
-- **Chrome Identity API** — OAuth 2.0 token management
+*   **Architecture:** Manifest V3 Service Worker (`background.js`) + Content Script (`content.js`).
+*   **Tech:** Pure Vanilla HTML5, CSS3 (harmony color palette and dark mode), and JavaScript.
+*   **Chrome Permissions:**
+    *   `tabs`, `activeTab` — for page scanning
+    *   `storage` — local persistence and reactive synchronization
+    *   `identity` — Chrome Identity API OAuth 2.0 token management
+    *   `notifications` — Desktop alerts on site saves
+*   **Drive Integration:** Google Drive REST API v3 (REST uploads using `uploadType=media`).
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Site Collector",
-  "version": "3.3.0",
+  "version": "3.4.2",
   "description": "Automatically detect and save AI and useful websites to Google Drive with descriptions and features",
   "permissions": [
     "tabs",
@@ -42,5 +42,15 @@
       "https://www.googleapis.com/auth/documents",
       "https://www.googleapis.com/auth/userinfo.email"
     ]
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/icon-16.png",
+        "icons/icon-48.png",
+        "icons/icon-128.png"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
