@@ -400,7 +400,14 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
   
   if (!searchResponse.ok) {
     if (searchResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    throw new Error(`Failed to search Drive: ${searchResponse.statusText}`);
+    let errMsg = searchResponse.statusText;
+    try {
+      const errJson = await searchResponse.json();
+      if (errJson && errJson.error && errJson.error.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch (e) {}
+    throw new Error(`Failed to search Drive: ${errMsg}`);
   }
   
   const searchData = await searchResponse.json();
@@ -432,7 +439,14 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
   
   if (!createResponse.ok) {
     if (createResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    throw new Error(`Failed to create Google Doc: ${createResponse.statusText}`);
+    let errMsg = createResponse.statusText;
+    try {
+      const errJson = await createResponse.json();
+      if (errJson && errJson.error && errJson.error.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch (e) {}
+    throw new Error(`Failed to create Google Doc: ${errMsg}`);
   }
   
   const newFile = await createResponse.json();
@@ -450,7 +464,14 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
   
   if (!initResponse.ok) {
     if (initResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    throw new Error(`Failed to write header to Google Doc: ${initResponse.statusText}`);
+    let errMsg = initResponse.statusText;
+    try {
+      const errJson = await initResponse.json();
+      if (errJson && errJson.error && errJson.error.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch (e) {}
+    throw new Error(`Failed to write header to Google Doc: ${errMsg}`);
   }
   
   await new Promise((resolve) => {
@@ -609,7 +630,14 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
       return await appendToDocument(token, newDocId, sites, newSkipIds);
     }
     
-    throw new Error(`Failed to read Google Doc: ${exportResponse.statusText}`);
+    let errMsg = exportResponse.statusText;
+    try {
+      const errJson = await exportResponse.json();
+      if (errJson && errJson.error && errJson.error.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch (e) {}
+    throw new Error(`Failed to read Google Doc: ${errMsg}`);
   }
 
   const currentContent = await exportResponse.text();
@@ -674,7 +702,14 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
       return await appendToDocument(token, newDocId, sites, newSkipIds);
     }
     
-    throw new Error(`Failed to update Google Doc: ${updateResponse.statusText}`);
+    let errMsg = updateResponse.statusText;
+    try {
+      const errJson = await updateResponse.json();
+      if (errJson && errJson.error && errJson.error.message) {
+        errMsg = errJson.error.message;
+      }
+    } catch (e) {}
+    throw new Error(`Failed to update Google Doc: ${errMsg}`);
   }
 
   return newSites.length;
