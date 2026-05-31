@@ -246,9 +246,8 @@ function authenticateWithGoogle(sendResponse) {
  */
 function listDriveFiles(token, sendResponse) {
   const REQUIRED_FILENAME = 'AI_Site_Collector_Database.odt';
-  // Query Drive for ONLY Google Docs matching our document name — no .txt files ever
   const q = encodeURIComponent(
-    `name='${REQUIRED_FILENAME}' and mimeType='application/vnd.google-apps.document' and trashed=false`
+    `name='${REQUIRED_FILENAME}' and mimeType='text/plain' and trashed=false`
   );
   fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime%20desc`, {
     headers: { Authorization: 'Bearer ' + token }
@@ -389,10 +388,10 @@ function syncToDrive(sendResponse) {
  */
 async function getOrCreateDefaultDoc(token, skipIds = []) {
   const DOC_NAME = 'AI_Site_Collector_Database.odt';
-  const GDOC_MIME = 'application/vnd.google-apps.document';
+  const TEXT_MIME = 'text/plain';
   
-  // 1. Search Drive strictly for a Google Doc (not .txt, not any other format)
-  const q = encodeURIComponent(`name='${DOC_NAME}' and mimeType='${GDOC_MIME}' and trashed=false`);
+  // 1. Search Drive for our plain text file matching our document name
+  const q = encodeURIComponent(`name='${DOC_NAME}' and mimeType='${TEXT_MIME}' and trashed=false`);
   const searchResponse = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`,
     { headers: { Authorization: 'Bearer ' + token } }
@@ -411,20 +410,20 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
   }
   
   const searchData = await searchResponse.json();
-  const files = (searchData.files || []).filter(f => f.mimeType === GDOC_MIME && !skipIds.includes(f.id));
+  const files = (searchData.files || []).filter(f => f.mimeType === TEXT_MIME && !skipIds.includes(f.id));
   
   if (files.length > 0) {
-    // Found existing Google Doc — reuse it
+    // Found existing file — reuse it
     const existingDoc = files[0];
     await new Promise((resolve) => {
       chrome.storage.local.set({ driveDocId: existingDoc.id, driveDocName: DOC_NAME }, resolve);
     });
-    console.log(`[Drive Sync] Found existing Google Doc: "${DOC_NAME}" (id: ${existingDoc.id})`);
+    console.log(`[Drive Sync] Found existing database: "${DOC_NAME}" (id: ${existingDoc.id})`);
     return existingDoc.id;
   }
   
-  // 2. No Google Doc found — create a new one
-  console.log(`[Drive Sync] Creating new Google Doc: "${DOC_NAME}"`);
+  // 2. No file found — create a new one
+  console.log(`[Drive Sync] Creating new plain text database: "${DOC_NAME}"`);
   const createResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     headers: {
@@ -433,7 +432,7 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
     },
     body: JSON.stringify({
       name: DOC_NAME,
-      mimeType: GDOC_MIME   // ← Strictly Google Doc format, never .txt
+      mimeType: TEXT_MIME
     })
   });
   
@@ -446,20 +445,21 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
         errMsg = errJson.error.message;
       }
     } catch (e) {}
-    throw new Error(`Failed to create Google Doc: ${errMsg}`);
+    throw new Error(`Failed to create database file: ${errMsg}`);
   }
   
   const newFile = await createResponse.json();
   const docId = newFile.id;
   
-  // 3. Write the initial header into the new Google Doc using the Docs API
+  // 3. Write the initial header into the new file using Drive upload media API
   const initialContent = 'AI Site Collector — Sync Database\n\nThis document is auto-managed by the AI Site Collector extension.\n\n';
-  const initResponse = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      requests: [{ insertText: { text: initialContent, endOfSegmentLocation: { segmentId: "" } } }]
-    })
+  const initResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`, {
+    method: 'PATCH',
+    headers: { 
+      Authorization: 'Bearer ' + token, 
+      'Content-Type': 'text/plain' 
+    },
+    body: initialContent
   });
   
   if (!initResponse.ok) {
@@ -471,14 +471,14 @@ async function getOrCreateDefaultDoc(token, skipIds = []) {
         errMsg = errJson.error.message;
       }
     } catch (e) {}
-    throw new Error(`Failed to write header to Google Doc: ${errMsg}`);
+    throw new Error(`Failed to write header to database file: ${errMsg}`);
   }
   
   await new Promise((resolve) => {
     chrome.storage.local.set({ driveDocId: docId, driveDocName: DOC_NAME }, resolve);
   });
   
-  console.log(`[Drive Sync] Created new Google Doc: "${DOC_NAME}" (id: ${docId})`);
+  console.log(`[Drive Sync] Created new database: "${DOC_NAME}" (id: ${docId})`);
   return docId;
 }
 
@@ -580,10 +580,10 @@ function generateDocumentContent(sites) {
  * Reads existing content via Docs API export, deduplicates by URL, then appends.
  */
 async function appendToDocument(token, docId, sites, skipIds = []) {
-  const GDOC_MIME = 'application/vnd.google-apps.document';
+  const TEXT_MIME = 'text/plain';
   let isDocValid = false;
 
-  // Verify that the stored docId is a valid, non-trashed Google Doc
+  // Verify that the stored docId is a valid, non-trashed plain text file
   if (docId && !skipIds.includes(docId)) {
     try {
       const fileCheckResponse = await fetch(
@@ -593,7 +593,7 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
       
       if (fileCheckResponse.ok) {
         const fileMeta = await fileCheckResponse.json();
-        if (fileMeta.mimeType === GDOC_MIME && !fileMeta.trashed) {
+        if (fileMeta.mimeType === TEXT_MIME && !fileMeta.trashed) {
           isDocValid = true;
         }
       }
@@ -602,27 +602,25 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
     }
   }
 
-  // If the stored document is not valid, trashed, or not a Google Doc, recreate/rediscover one
+  // If the stored document is not valid, trashed, or not correct MIME, recreate/rediscover one
   if (!isDocValid) {
-    console.log('[Drive Sync] Stored document is invalid, trashed, or not a Google Doc. Recreating or auto-discovering...');
+    console.log('[Drive Sync] Stored document is invalid, trashed, or not plain text. Recreating or auto-discovering...');
     const newDocId = await getOrCreateDefaultDoc(token, skipIds);
     docId = newDocId;
   }
 
-  // ── Step 1: Read current Google Doc content to deduplicate ──
-  // Use Drive export to get plain-text content for URL deduplication check
+  // ── Step 1: Read current database content to deduplicate ──
   let exportResponse = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${docId}/export?mimeType=text/plain`,
+    `https://www.googleapis.com/drive/v3/files/${docId}?alt=media`,
     { headers: { Authorization: 'Bearer ' + token } }
   );
 
   if (!exportResponse.ok) {
     if (exportResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
     
-    // Self-healing: if 403 or 404 occurs, it means we don't have access to this file.
-    // Force recreate a new default document!
+    // Self-healing: if 403 or 404 occurs, force recreate a new default document!
     if (exportResponse.status === 403 || exportResponse.status === 404) {
-      console.log(`[Drive Sync] Access denied (status ${exportResponse.status}) to document ${docId}. Re-creating a new owned Google Doc...`);
+      console.log(`[Drive Sync] Access denied (status ${exportResponse.status}) to document ${docId}. Re-creating a new owned database...`);
       const newSkipIds = [...skipIds, docId];
       // Clear storage
       await new Promise(resolve => chrome.storage.local.set({ driveDocId: null }, resolve));
@@ -637,7 +635,7 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
         errMsg = errJson.error.message;
       }
     } catch (e) {}
-    throw new Error(`Failed to read Google Doc: ${errMsg}`);
+    throw new Error(`Failed to read database file: ${errMsg}`);
   }
 
   const currentContent = await exportResponse.text();
@@ -670,22 +668,18 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
 
   textToInsert += `${'─'.repeat(60)}\n`;
 
-  // ── Step 4: Append to the Google Doc using the Docs API batchUpdate ──
+  const updatedContent = currentContent + textToInsert;
+
+  // ── Step 4: Write updated content back to Drive using upload media API ──
   const updateResponse = await fetch(
-    `https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`,
+    `https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`,
     {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requests: [{
-          insertText: {
-            text: textToInsert,
-            endOfSegmentLocation: {
-              segmentId: ""
-            }
-          }
-        }]
-      })
+      method: 'PATCH',
+      headers: { 
+        Authorization: 'Bearer ' + token, 
+        'Content-Type': 'text/plain' 
+      },
+      body: updatedContent
     }
   );
 
@@ -694,7 +688,7 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
     
     // Self-healing: if 403 or 404 occurs on update, force recreate a new default document!
     if (updateResponse.status === 403 || updateResponse.status === 404) {
-      console.log(`[Drive Sync] Access denied (status ${updateResponse.status}) on update to document ${docId}. Re-creating a new owned Google Doc...`);
+      console.log(`[Drive Sync] Access denied (status ${updateResponse.status}) on update to document ${docId}. Re-creating a new owned database...`);
       const newSkipIds = [...skipIds, docId];
       // Clear storage
       await new Promise(resolve => chrome.storage.local.set({ driveDocId: null }, resolve));
@@ -709,7 +703,7 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
         errMsg = errJson.error.message;
       }
     } catch (e) {}
-    throw new Error(`Failed to update Google Doc: ${errMsg}`);
+    throw new Error(`Failed to update database file: ${errMsg}`);
   }
 
   return newSites.length;
