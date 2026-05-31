@@ -506,6 +506,19 @@ const USEFUL_SCORE_THRESHOLD = 5;
 // ============================================================
 
 /**
+ * Format and summarize description to a clean, brief context (max 180 characters)
+ */
+function cleanToBriefDescription(desc) {
+  if (!desc) return '';
+  let clean = desc.replace(/\s+/g, ' ').trim();
+  if (clean.length > 180) {
+    clean = clean.substring(0, 177).trim();
+    clean = clean.replace(/[,;\.\-\s]+$/, '') + '...';
+  }
+  return clean;
+}
+
+/**
  * Extract page metadata
  */
 function extractPageMetadata() {
@@ -519,11 +532,11 @@ function extractPageMetadata() {
 
   const metaDesc = document.querySelector('meta[name="description"]')
     || document.querySelector('meta[property="og:description"]');
-  if (metaDesc) metadata.description = metaDesc.getAttribute('content') || '';
+  if (metaDesc) metadata.description = cleanToBriefDescription(metaDesc.getAttribute('content') || '');
 
   if (!metadata.description) {
     const p = document.querySelector('article p, main p, p');
-    if (p) metadata.description = p.textContent.substring(0, 200).trim();
+    if (p) metadata.description = cleanToBriefDescription(p.textContent || '');
   }
 
   const favicon = document.querySelector('link[rel="icon"]')
@@ -690,6 +703,39 @@ function scoreText(text, weightedList) {
   return score;
 }
 
+/**
+ * Format tag strings, capitalizing properly and handling common acronyms
+ */
+function capitalizeTag(tag) {
+  const acronyms = {
+    'ai': 'AI',
+    'llm': 'LLM',
+    'api': 'API',
+    'nlp': 'NLP',
+    'gpt': 'GPT',
+    '2fa': '2FA',
+    'mfa': 'MFA',
+    'csv': 'CSV'
+  };
+  return tag.split(' ').map(w => {
+    const wl = w.toLowerCase();
+    return acronyms[wl] || (w.charAt(0).toUpperCase() + w.slice(1));
+  }).join(' ');
+}
+
+/**
+ * Extract and capitalize matched keywords from content to use as brief context tags
+ */
+function extractMatchedTags(text, weightedList) {
+  const matched = [];
+  for (const { term } of weightedList) {
+    if (text.includes(term) && term.length > 2) {
+      matched.push(capitalizeTag(term));
+    }
+  }
+  return [...new Set(matched)].slice(0, 4);
+}
+
 // ============================================================
 //  MAIN CLASSIFIER
 // ============================================================
@@ -726,6 +772,7 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
     confidence: 0,
     name: null,
     description: null,
+    tags: [],
     reasons: []
   };
 
@@ -741,6 +788,7 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
     result.confidence = 1.0;
     result.name = kbEntry.name;
     result.description = kbEntry.description;
+    result.tags = kbEntry.tags || [];
     result.reasons = ['Verified knowledge base entry'];
     return result; // immediate return  -  no further checks needed
   }
@@ -761,6 +809,12 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
     result.isAI = true;
     result.confidence = Math.max(result.confidence, 0.85);
     result.label = 'AI Tool';
+    const allWeighted = [
+      ...WEIGHTED_AI_KEYWORDS,
+      ...(customAiKeywords || []).map(kw => ({ term: kw.toLowerCase(), weight: 6 }))
+    ];
+    const matched = extractMatchedTags(text, allWeighted);
+    result.tags = matched.length > 0 ? matched : ['AI Tool', 'Agentic'];
     result.reasons.push('Direct AI/Agent keyword matched in page metadata');
     return result; // immediate return - successfully identified
   }
@@ -825,7 +879,17 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
     }
   }
 
-  if (result.isAI) return result;
+  if (result.isAI) {
+    if (!result.tags || result.tags.length === 0) {
+      const allWeighted = [
+        ...WEIGHTED_AI_KEYWORDS,
+        ...(customAiKeywords || []).map(kw => ({ term: kw.toLowerCase(), weight: 6 }))
+      ];
+      const matched = extractMatchedTags(text, allWeighted);
+      result.tags = matched.length > 0 ? matched : ['AI Platform'];
+    }
+    return result;
+  }
 
   // ── STEP 6: Weighted AI keyword scoring (fallback) ──
   const allWeighted = [
@@ -839,6 +903,8 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
     result.confidence = Math.min(0.90, 0.50 + (aiScore / 60));
     result.label = 'AI Tool';
     result.reasons.push(`AI keyword score: ${aiScore} points`);
+    const matched = extractMatchedTags(text, allWeighted);
+    result.tags = matched.length > 0 ? matched : ['AI Platform'];
     return result;
   }
 
@@ -855,6 +921,19 @@ function classifyWebsite(metadata, customAiKeywords, customUsefulKeywords, remot
       result.label = 'Useful Tool';
       result.confidence = Math.min(0.85, 0.50 + (usefulScore / 30));
       result.reasons.push(`Useful keyword score: ${usefulScore} points`);
+      const matched = extractMatchedTags(text, allUseful);
+      result.tags = matched.length > 0 ? matched : ['Useful Tool'];
+    }
+  }
+
+  if (result.isUseful) {
+    if (!result.tags || result.tags.length === 0) {
+      const allUseful = [
+        ...WEIGHTED_USEFUL_KEYWORDS,
+        ...(customUsefulKeywords || []).map(kw => ({ term: kw.toLowerCase(), weight: 5 }))
+      ];
+      const matched = extractMatchedTags(text, allUseful);
+      result.tags = matched.length > 0 ? matched : ['Useful Tool'];
     }
   }
 

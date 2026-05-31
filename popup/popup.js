@@ -399,18 +399,61 @@ function renderSites() {
 function extractFeatures(site) {
     const features = [];
     
-    // Extract from classification reasons
-    if (site.classification.reasons && Array.isArray(site.classification.reasons)) {
-        features.push(...site.classification.reasons);
+    // 1. Prioritize classification tags
+    if (site.classification && site.classification.tags && Array.isArray(site.classification.tags)) {
+        features.push(...site.classification.tags);
     }
     
-    // Extract from keywords
-    if (site.keywords && Array.isArray(site.keywords) && site.keywords.length > 0) {
+    // 2. Filter classification reasons to exclude technical/debug details
+    if (site.classification && site.classification.reasons && Array.isArray(site.classification.reasons)) {
+        const cleanReasons = site.classification.reasons.filter(r => {
+            const rl = r.toLowerCase();
+            return !rl.includes('knowledge base') &&
+                   !rl.includes('keyword matched') &&
+                   !rl.includes('domain list match') &&
+                   !rl.includes('keyword score') &&
+                   !rl.includes('points') &&
+                   !rl.includes('custom ai keyword match') &&
+                   !rl.includes('tld') &&
+                   !rl.includes('corroboration') &&
+                   !rl.includes('useful platform domain');
+        });
+        features.push(...cleanReasons);
+    }
+    
+    // 3. Fallback to page keywords
+    if (site.keywords && Array.isArray(site.keywords)) {
         features.push(...site.keywords.slice(0, 3));
     }
     
-    // Remove duplicates and limit to 5
-    return [...new Set(features)].slice(0, 5);
+    // 4. Extract from description if still short on features
+    const descKeywords = [
+        'free', 'open source', 'api', 'tool', 'platform', 'service', 'framework', 
+        'library', 'automation', 'productivity', 'agent', 'chatbot', 'chat', 'model', 
+        'image', 'video', 'voice', 'audio', 'design', 'code', 'developer', 'search',
+        'analytics', 'marketing', 'creative', 'llm', 'writing', 'translation', 'database',
+        'security', 'privacy', 'cloud', 'hosting', 'deployment', 'collaboration'
+    ];
+    if (site.description && features.length < 5) {
+        descKeywords.forEach(keyword => {
+            if (site.description.toLowerCase().includes(keyword)) {
+                features.push(keyword);
+            }
+        });
+    }
+    
+    // 5. Professional Capitalization & Deduplication
+    const acronyms = {
+        'ai': 'AI', 'llm': 'LLM', 'api': 'API', 'nlp': 'NLP', 'gpt': 'GPT', '2fa': '2FA', 'mfa': 'MFA', 'csv': 'CSV'
+    };
+    const cleanFeatures = features.map(f => {
+        return f.split(' ').map(w => {
+            const wl = w.toLowerCase();
+            return acronyms[wl] || (w.charAt(0).toUpperCase() + w.slice(1));
+        }).join(' ');
+    });
+    
+    return [...new Set(cleanFeatures)].slice(0, 5);
 }
 
 /**
@@ -528,15 +571,24 @@ function openSettings() {
  */
 function logout() {
     if (confirm('Are you sure you want to sign out? Your local site collection will be preserved.')) {
-        chrome.storage.local.set({
-            isAuthenticated: false,
-            authToken: null,
-            userEmail: null,
-            driveDocId: null,
-            driveDocName: null
-        }, () => {
-            checkAuthStatus();
-            settingsModal.classList.remove('active');
+        chrome.storage.local.get('authToken', (result) => {
+            if (result.authToken) {
+                chrome.identity.removeCachedAuthToken({ token: result.authToken }, () => {
+                    console.log('Cached auth token cleared.');
+                });
+            }
+            chrome.storage.local.set({
+                isAuthenticated: false,
+                authToken: null,
+                userEmail: null,
+                driveDocId: null,
+                driveDocName: null
+            }, () => {
+                checkAuthStatus();
+                if (typeof settingsModal !== 'undefined' && settingsModal) {
+                    settingsModal.classList.remove('active');
+                }
+            });
         });
     }
 }

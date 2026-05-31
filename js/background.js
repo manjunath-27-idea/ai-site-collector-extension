@@ -387,7 +387,7 @@ function syncToDrive(sendResponse) {
  * Automatically find or create the default Google Doc in Drive
  * Only works with Google Docs format (application/vnd.google-apps.document)
  */
-async function getOrCreateDefaultDoc(token) {
+async function getOrCreateDefaultDoc(token, skipIds = []) {
   const DOC_NAME = 'AI_Site_Collector_Database';
   const GDOC_MIME = 'application/vnd.google-apps.document';
   
@@ -404,7 +404,7 @@ async function getOrCreateDefaultDoc(token) {
   }
   
   const searchData = await searchResponse.json();
-  const files = (searchData.files || []).filter(f => f.mimeType === GDOC_MIME);
+  const files = (searchData.files || []).filter(f => f.mimeType === GDOC_MIME && !skipIds.includes(f.id));
   
   if (files.length > 0) {
     // Found existing Google Doc — reuse it
@@ -467,17 +467,34 @@ async function getOrCreateDefaultDoc(token) {
 function extractFeatures(site) {
   const features = [];
   
-  // Extract from classification reasons
-  if (site.classification.reasons && Array.isArray(site.classification.reasons)) {
-    features.push(...site.classification.reasons);
+  // 1. Prioritize classification tags
+  if (site.classification && site.classification.tags && Array.isArray(site.classification.tags)) {
+    features.push(...site.classification.tags);
   }
   
-  // Extract from keywords
-  if (site.keywords && Array.isArray(site.keywords) && site.keywords.length > 0) {
+  // 2. Filter classification reasons to exclude technical/debug details
+  if (site.classification && site.classification.reasons && Array.isArray(site.classification.reasons)) {
+    const cleanReasons = site.classification.reasons.filter(r => {
+      const rl = r.toLowerCase();
+      return !rl.includes('knowledge base') &&
+             !rl.includes('keyword matched') &&
+             !rl.includes('domain list match') &&
+             !rl.includes('keyword score') &&
+             !rl.includes('points') &&
+             !rl.includes('custom ai keyword match') &&
+             !rl.includes('tld') &&
+             !rl.includes('corroboration') &&
+             !rl.includes('useful platform domain');
+    });
+    features.push(...cleanReasons);
+  }
+  
+  // 3. Fallback to page keywords
+  if (site.keywords && Array.isArray(site.keywords)) {
     features.push(...site.keywords.slice(0, 3));
   }
   
-  // Extract from description
+  // 4. Extract from description if still short on features
   const descKeywords = [
     'free', 'open source', 'api', 'tool', 'platform', 'service', 'framework', 
     'library', 'automation', 'productivity', 'agent', 'chatbot', 'chat', 'model', 
@@ -485,16 +502,26 @@ function extractFeatures(site) {
     'analytics', 'marketing', 'creative', 'llm', 'writing', 'translation', 'database',
     'security', 'privacy', 'cloud', 'hosting', 'deployment', 'collaboration'
   ];
-  if (site.description) {
+  if (site.description && features.length < 5) {
     descKeywords.forEach(keyword => {
-      if (site.description.toLowerCase().includes(keyword) && !features.includes(keyword)) {
+      if (site.description.toLowerCase().includes(keyword)) {
         features.push(keyword);
       }
     });
   }
   
-  // Remove duplicates and limit to 5
-  return [...new Set(features)].slice(0, 5);
+  // 5. Professional Capitalization & Deduplication
+  const acronyms = {
+    'ai': 'AI', 'llm': 'LLM', 'api': 'API', 'nlp': 'NLP', 'gpt': 'GPT', '2fa': '2FA', 'mfa': 'MFA', 'csv': 'CSV'
+  };
+  const cleanFeatures = features.map(f => {
+    return f.split(' ').map(w => {
+      const wl = w.toLowerCase();
+      return acronyms[wl] || (w.charAt(0).toUpperCase() + w.slice(1));
+    }).join(' ');
+  });
+  
+  return [...new Set(cleanFeatures)].slice(0, 5);
 }
 
 /**
@@ -531,12 +558,12 @@ function generateDocumentContent(sites) {
  * Append new sites to an existing Google Doc (Google Docs format only)
  * Reads existing content via Docs API export, deduplicates by URL, then appends.
  */
-async function appendToDocument(token, docId, sites) {
+async function appendToDocument(token, docId, sites, skipIds = []) {
   const GDOC_MIME = 'application/vnd.google-apps.document';
   let isDocValid = false;
 
   // Verify that the stored docId is a valid, non-trashed Google Doc
-  if (docId) {
+  if (docId && !skipIds.includes(docId)) {
     try {
       const fileCheckResponse = await fetch(
         `https://www.googleapis.com/drive/v3/files/${docId}?fields=mimeType,trashed`,
@@ -557,7 +584,7 @@ async function appendToDocument(token, docId, sites) {
   // If the stored document is not valid, trashed, or not a Google Doc, recreate/rediscover one
   if (!isDocValid) {
     console.log('[Drive Sync] Stored document is invalid, trashed, or not a Google Doc. Recreating or auto-discovering...');
-    const newDocId = await getOrCreateDefaultDoc(token);
+    const newDocId = await getOrCreateDefaultDoc(token, skipIds);
     docId = newDocId;
   }
 
@@ -570,6 +597,18 @@ async function appendToDocument(token, docId, sites) {
 
   if (!exportResponse.ok) {
     if (exportResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+    
+    // Self-healing: if 403 or 404 occurs, it means we don't have access to this file.
+    // Force recreate a new default document!
+    if (exportResponse.status === 403 || exportResponse.status === 404) {
+      console.log(`[Drive Sync] Access denied (status ${exportResponse.status}) to document ${docId}. Re-creating a new owned Google Doc...`);
+      const newSkipIds = [...skipIds, docId];
+      // Clear storage
+      await new Promise(resolve => chrome.storage.local.set({ driveDocId: null }, resolve));
+      const newDocId = await getOrCreateDefaultDoc(token, newSkipIds);
+      return await appendToDocument(token, newDocId, sites, newSkipIds);
+    }
+    
     throw new Error(`Failed to read Google Doc: ${exportResponse.statusText}`);
   }
 
@@ -622,6 +661,17 @@ async function appendToDocument(token, docId, sites) {
 
   if (!updateResponse.ok) {
     if (updateResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
+    
+    // Self-healing: if 403 or 404 occurs on update, force recreate a new default document!
+    if (updateResponse.status === 403 || updateResponse.status === 404) {
+      console.log(`[Drive Sync] Access denied (status ${updateResponse.status}) on update to document ${docId}. Re-creating a new owned Google Doc...`);
+      const newSkipIds = [...skipIds, docId];
+      // Clear storage
+      await new Promise(resolve => chrome.storage.local.set({ driveDocId: null }, resolve));
+      const newDocId = await getOrCreateDefaultDoc(token, newSkipIds);
+      return await appendToDocument(token, newDocId, sites, newSkipIds);
+    }
+    
     throw new Error(`Failed to update Google Doc: ${updateResponse.statusText}`);
   }
 
