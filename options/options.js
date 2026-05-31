@@ -137,6 +137,9 @@ function checkAuthStatus() {
 
             // Show sync status badge in header
             if (syncStatus) syncStatus.style.display = 'inline-block';
+            
+            // Render the selected sync document filename
+            loadSelectedDocument();
         } else {
             // Show signed out profile button
             sidebarSignedOut.style.display = 'flex';
@@ -574,9 +577,9 @@ function deleteSingleSite(siteId) {
  * Load selected Google Drive document info
  */
 function loadSelectedDocument() {
-    chrome.runtime.sendMessage({ action: 'getDriveDocument' }, (response) => {
-        if (response.docId && response.docName) {
-            let docName = response.docName;
+    chrome.storage.local.get(['driveDocId', 'driveDocName'], (result) => {
+        if (result.driveDocId && result.driveDocName) {
+            let docName = result.driveDocName;
             if (docName.endsWith('.txt')) {
                 docName = docName.substring(0, docName.length - 4);
                 chrome.storage.local.set({ driveDocName: docName });

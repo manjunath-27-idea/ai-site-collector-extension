@@ -538,6 +538,13 @@ body {
     background: rgba(99, 102, 241, 0.1);
     border: 1px solid var(--primary);
     border-radius: var(--radius-md);
+    
+    /* Layout safety constraints to prevent layout distortion on smaller screen widths */
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .selected-doc p {

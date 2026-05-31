@@ -751,6 +751,13 @@ body {
     font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
+    
+    /* Layout safety constraints to prevent layout distortion on smaller screen widths */
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .sync-actions {

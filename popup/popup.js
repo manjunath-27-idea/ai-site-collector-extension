@@ -174,6 +174,7 @@ function checkAuthStatus() {
                 }
             }
             if (syncStatus) syncStatus.style.display = 'block';
+            loadSelectedDocument();
         } else {
             showAuthSection();
             if (popupSignedOut && popupSignedIn) {
@@ -259,9 +260,9 @@ function loadSites() {
  * Load selected document info
  */
 function loadSelectedDocument() {
-    chrome.runtime.sendMessage({ action: 'getDriveDocument' }, (response) => {
-        if (response.docId && response.docName) {
-            let docName = response.docName;
+    chrome.storage.local.get(['driveDocId', 'driveDocName'], (result) => {
+        if (result.driveDocId && result.driveDocName) {
+            let docName = result.driveDocName;
             if (docName.endsWith('.txt')) {
                 docName = docName.substring(0, docName.length - 4);
                 chrome.storage.local.set({ driveDocName: docName });
