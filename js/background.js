@@ -112,19 +112,38 @@ function saveSiteData(siteData, tabId) {
       });
       
       chrome.storage.local.set({ sites }, () => {
-        // Show notification if enabled
-        if (result.notificationsSetting !== false) {
-          chrome.notifications.create({
-            type: 'basic',
-            iconUrl: 'icons/icon-128.png',
-            title: 'Site Saved!',
-            message: `"${siteData.title}" has been saved.`
-          });
-        }
-        
         // Auto-sync if enabled
         if (result.autoSyncSetting !== false) {
-          syncToDrive(() => {});
+          syncToDrive((syncResponse) => {
+            if (result.notificationsSetting !== false) {
+              if (syncResponse && syncResponse.success) {
+                chrome.notifications.create({
+                  type: 'basic',
+                  iconUrl: 'icons/icon-128.png',
+                  title: 'Saved & Backed Up!',
+                  message: `"${siteData.title}" is saved and backed up inside the "AI Site Collector" folder.`
+                });
+              } else {
+                const errMsg = (syncResponse && syncResponse.error) || 'Unknown error';
+                chrome.notifications.create({
+                  type: 'basic',
+                  iconUrl: 'icons/icon-128.png',
+                  title: 'Saved Locally (Sync Failed)',
+                  message: `"${siteData.title}" is saved locally, but Drive backup failed: ${errMsg}`
+                });
+              }
+            }
+          });
+        } else {
+          // Regular local-only notification
+          if (result.notificationsSetting !== false) {
+            chrome.notifications.create({
+              type: 'basic',
+              iconUrl: 'icons/icon-128.png',
+              title: 'Site Saved!',
+              message: `"${siteData.title}" has been saved locally.`
+            });
+          }
         }
       });
     } else {
