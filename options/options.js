@@ -72,6 +72,7 @@ function init() {
     loadSelectedDocument();
     loadSettings();
     loadCustomKeywords();
+    updateSyncBadge();
 }
 
 /**
@@ -823,6 +824,9 @@ function escapeHtml(text) {
 // Listen for storage changes from background script or popup
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local') {
+        if (changes.sites || changes.isAuthenticated) {
+            updateSyncBadge();
+        }
         if (changes.sites) {
             loadSites();
         }
@@ -840,3 +844,32 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
         }
     }
 });
+
+/**
+ * Update the sidebar sync status badge count & tick icon
+ */
+function updateSyncBadge() {
+    chrome.storage.local.get(['sites', 'isAuthenticated'], (result) => {
+        const sidebarSyncBadge = document.getElementById('sidebarSyncBadge');
+        if (!sidebarSyncBadge) return;
+
+        if (!result.isAuthenticated) {
+            sidebarSyncBadge.style.display = 'none';
+            return;
+        }
+
+        const sites = result.sites || [];
+        const unsyncedCount = sites.filter(s => !s.synced).length;
+
+        sidebarSyncBadge.style.display = 'inline-flex';
+        if (unsyncedCount > 0) {
+            sidebarSyncBadge.textContent = unsyncedCount;
+            sidebarSyncBadge.className = 'sync-badge unsynced';
+            sidebarSyncBadge.title = `${unsyncedCount} unsynced sites`;
+        } else {
+            sidebarSyncBadge.textContent = '✓';
+            sidebarSyncBadge.className = 'sync-badge synced';
+            sidebarSyncBadge.title = 'All sites fully synced to Drive';
+        }
+    });
+}

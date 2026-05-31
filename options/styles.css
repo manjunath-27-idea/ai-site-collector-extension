@@ -1268,4 +1268,40 @@ body.light-theme .profile-version {
     to { transform: rotate(360deg); }
 }
 
+/* Sidebar Sync Badge & Tick */
+.sidebar-sync-container {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.sync-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    pointer-events: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+}
+
+.sync-badge.unsynced {
+    background: #f97316; /* Vibrant orange for unsynced count */
+    border: 1px solid var(--border-color);
+}
+
+.sync-badge.synced {
+    background: #22c55e; /* Vibrant green check */
+    border: 1px solid var(--border-color);
+    font-size: 10px;
+}
+
 
