@@ -352,7 +352,11 @@ function syncToDrive(sendResponse) {
       // Append sites to the document
       const newSitesSyncedCount = await appendToDocument(result.authToken, docId, sites);
       
+      // Update all local sites to synced: true in storage
+      const updatedSites = sites.map(s => ({ ...s, synced: true }));
+      
       chrome.storage.local.set({ 
+        sites: updatedSites,
         lastSync: new Date().toISOString()
       });
       
@@ -380,7 +384,14 @@ function syncToDrive(sendResponse) {
                   try {
                     const docId = retryResult.driveDocId || await getOrCreateDefaultDoc(newToken);
                     const newSitesSyncedCount = await appendToDocument(newToken, docId, retryResult.sites || []);
-                    chrome.storage.local.set({ lastSync: new Date().toISOString() });
+                    
+                    // Update all local sites to synced: true in storage
+                    const retrySites = (retryResult.sites || []).map(s => ({ ...s, synced: true }));
+                    
+                    chrome.storage.local.set({ 
+                      sites: retrySites,
+                      lastSync: new Date().toISOString() 
+                    });
                     sendResponse({
                       success: true,
                       message: newSitesSyncedCount > 0 
