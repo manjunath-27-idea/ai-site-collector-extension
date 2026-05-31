@@ -1252,6 +1252,24 @@ body.light-theme .profile-version {
     background: rgba(99, 102, 241, 0.1);
 }
 
+.sync-icon-btn.synced {
+    color: #22c55e; /* Green color for up to date sync cycle */
+}
+
+.sync-icon-btn.synced:hover {
+    color: #16a34a;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.sync-icon-btn.unsynced {
+    color: #f97316; /* Orange color when unsynced sites exist */
+}
+
+.sync-icon-btn.unsynced:hover {
+    color: #ea580c;
+    background: rgba(249, 115, 22, 0.1);
+}
+
 .sync-cycle-icon {
     width: 14px;
     height: 14px;

@@ -851,10 +851,12 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 function updateSyncBadge() {
     chrome.storage.local.get(['sites', 'isAuthenticated'], (result) => {
         const sidebarSyncBadge = document.getElementById('sidebarSyncBadge');
+        const sidebarSyncBtn = document.getElementById('sidebarSyncBtn');
         if (!sidebarSyncBadge) return;
 
         if (!result.isAuthenticated) {
             sidebarSyncBadge.style.display = 'none';
+            if (sidebarSyncBtn) sidebarSyncBtn.className = 'sync-icon-btn';
             return;
         }
 
@@ -866,10 +868,18 @@ function updateSyncBadge() {
             sidebarSyncBadge.textContent = unsyncedCount;
             sidebarSyncBadge.className = 'sync-badge unsynced';
             sidebarSyncBadge.title = `${unsyncedCount} unsynced sites`;
+            if (sidebarSyncBtn) {
+                sidebarSyncBtn.className = 'sync-icon-btn unsynced';
+                sidebarSyncBtn.title = `Sync Collection to Drive (${unsyncedCount} unsynced sites)`;
+            }
         } else {
             sidebarSyncBadge.textContent = '✓';
             sidebarSyncBadge.className = 'sync-badge synced';
             sidebarSyncBadge.title = 'All sites fully synced to Drive';
+            if (sidebarSyncBtn) {
+                sidebarSyncBtn.className = 'sync-icon-btn synced';
+                sidebarSyncBtn.title = 'All sites fully synced to Drive';
+            }
         }
     });
 }
