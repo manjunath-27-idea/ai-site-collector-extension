@@ -245,7 +245,7 @@ function authenticateWithGoogle(sendResponse) {
  * List Google Docs files in Drive (Google Docs format only)
  */
 function listDriveFiles(token, sendResponse) {
-  const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
+  const REQUIRED_FILENAME = 'AI_Site_Collector_Database.odt';
   // Query Drive for ONLY Google Docs matching our document name — no .txt files ever
   const q = encodeURIComponent(
     `name='${REQUIRED_FILENAME}' and mimeType='application/vnd.google-apps.document' and trashed=false`
@@ -275,7 +275,7 @@ function listDriveFiles(token, sendResponse) {
  * Set the Google Drive document for syncing (Google Docs format only)
  */
 function setDriveDocument(docId, docName, sendResponse) {
-  const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
+  const REQUIRED_FILENAME = 'AI_Site_Collector_Database.odt';
   
   // Always store the clean name — no file extension, Google Docs have no extension
   const cleanName = (docName || REQUIRED_FILENAME).replace(/\.txt$/i, '').trim() || REQUIRED_FILENAME;
@@ -313,7 +313,7 @@ function syncToDrive(sendResponse) {
     }
 
     try {
-      const REQUIRED_FILENAME = 'AI_Site_Collector_Database';
+      const REQUIRED_FILENAME = 'AI_Site_Collector_Database.odt';
       let docId = result.driveDocId;
       // docName is always stored without extension — it's a Google Doc, not a file
       const docName = (result.driveDocName || REQUIRED_FILENAME).replace(/\.txt$/i, '').trim() || REQUIRED_FILENAME;
@@ -388,7 +388,7 @@ function syncToDrive(sendResponse) {
  * Only works with Google Docs format (application/vnd.google-apps.document)
  */
 async function getOrCreateDefaultDoc(token, skipIds = []) {
-  const DOC_NAME = 'AI_Site_Collector_Database';
+  const DOC_NAME = 'AI_Site_Collector_Database.odt';
   const GDOC_MIME = 'application/vnd.google-apps.document';
   
   // 1. Search Drive strictly for a Google Doc (not .txt, not any other format)
