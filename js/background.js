@@ -202,6 +202,7 @@ function saveSiteData(siteData, tabId) {
         sites[existingIndex] = {
           ...existing,
           ...updatedFields,
+          synced: false, // Mark as unsynced so it triggers a backup update!
           updatedAt: new Date().toISOString()
         };
         chrome.storage.local.set({ sites }, () => {
@@ -657,38 +658,43 @@ function extractFeatures(site) {
 }
 
 /**
- * Generate formatted document content for appending
+ * Generate formatted document content for the entire database (newest first)
  */
-function generateDocumentContent(sites) {
+function generateFullDatabaseContent(sites) {
   const timestamp = new Date().toLocaleString();
   const line80 = '='.repeat(80);
-  let content = `\n\n${line80}\n`;
-  content += `SYNC UPDATE — ${timestamp}\n`;
-  content += `Sites in this batch: ${sites.length}\n`;
+  let content = `AI Site Collector — Sync Database\n`;
+  content += `This document is auto-managed by the AI Site Collector extension.\n\n`;
+  content += `${line80}\n`;
+  content += `LATEST COLLECTION DATABASE | Last Sync: ${timestamp} | Total Sites: ${sites.length}\n`;
   content += `${line80}\n\n`;
 
-  sites.forEach((site, index) => {
+  // Sort sites: newest saved first
+  const sortedSites = [...sites].sort((a, b) => new Date(b.savedAt || b.timestamp) - new Date(a.savedAt || a.timestamp));
+
+  sortedSites.forEach((site, index) => {
+    const features = extractFeatures(site);
     const category = site.classification.isAI ? 'AI Platform' : 'Useful Tool';
-    const confidence = Math.round((site.classification.confidence || 0) * 100);
+    const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
     const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
-    // Use the clean description from the knowledge base if available
-    const description = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
 
     content += `${index + 1}. ${site.title}\n`;
     content += `   URL         : ${site.url}\n`;
     content += `   Category    : ${category}\n`;
-    content += `   Description : ${description}\n`;
-    content += `   Confidence  : ${confidence}%\n`;
-    content += `   Saved       : ${savedDate}\n`;
-    content += `\n`;
+    content += `   Description : ${cleanDesc}\n`;
+    if (features.length > 0) {
+      content += `   Features    : ${features.join(', ')}\n`;
+    }
+    content += `   Confidence  : ${Math.round((site.classification.confidence || 0) * 100)}%\n`;
+    content += `   Saved       : ${savedDate}\n\n`;
   });
 
+  content += `${'='.repeat(80)}\n`;
   return content;
 }
 
 /**
- * Append new sites to an existing Google Doc (Google Docs format only)
- * Reads existing content via Docs API export, deduplicates by URL, then appends.
+ * Sync all sites to Google Drive by overwriting the file with the latest up-to-date formatted database
  */
 async function appendToDocument(token, docId, sites, skipIds = []) {
   const TEXT_MIME = 'text/plain';
@@ -720,68 +726,14 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
     docId = newDocId;
   }
 
-  // ── Step 1: Read current database content to deduplicate ──
-  let exportResponse = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${docId}?alt=media`,
-    { headers: { Authorization: 'Bearer ' + token } }
-  );
+  // ── Step 1: Count how many unsynced sites are in this batch ──
+  const unsyncedSites = sites.filter(s => !s.synced);
+  const unsyncedCount = unsyncedSites.length;
 
-  if (!exportResponse.ok) {
-    if (exportResponse.status === 401) throw new Error('UNAUTHORIZED_TOKEN');
-    
-    // Self-healing: if 403 or 404 occurs, force recreate a new default document!
-    if (exportResponse.status === 403 || exportResponse.status === 404) {
-      console.log(`[Drive Sync] Access denied (status ${exportResponse.status}) to document ${docId}. Re-creating a new owned database...`);
-      const newSkipIds = [...skipIds, docId];
-      // Clear storage
-      await new Promise(resolve => chrome.storage.local.set({ driveDocId: null }, resolve));
-      const newDocId = await getOrCreateDefaultDoc(token, newSkipIds);
-      return await appendToDocument(token, newDocId, sites, newSkipIds);
-    }
-    
-    let errMsg = exportResponse.statusText;
-    try {
-      const errJson = await exportResponse.json();
-      if (errJson && errJson.error && errJson.error.message) {
-        errMsg = errJson.error.message;
-      }
-    } catch (e) {}
-    throw new Error(`Failed to read database file: ${errMsg}`);
-  }
+  // ── Step 2: Generate the complete formatted database content ──
+  const updatedContent = generateFullDatabaseContent(sites);
 
-  const currentContent = await exportResponse.text();
-
-  // ── Step 2: Filter to only brand-new sites not already in the document ──
-  const newSites = sites.filter(site => !currentContent.includes(site.url));
-  if (newSites.length === 0) {
-    return 0; // All sites already synced — nothing to add
-  }
-
-  // ── Step 3: Build the text block to insert ──
-  const timestamp = new Date().toLocaleString();
-  let textToInsert = `\n\n${'='.repeat(60)}\nSYNC UPDATE — ${timestamp} | ${newSites.length} new site(s)\n${'='.repeat(60)}\n\n`;
-
-  newSites.forEach((site, i) => {
-    const features = extractFeatures(site);
-    const category = site.classification.isAI ? 'AI Platform' : 'Useful Tool';
-    const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
-    const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
-
-    textToInsert += `${i + 1}. ${site.title}\n`;
-    textToInsert += `   URL         : ${site.url}\n`;
-    textToInsert += `   Type        : ${category}\n`;
-    textToInsert += `   Description : ${cleanDesc}\n`;
-    if (features.length > 0) {
-      textToInsert += `   Features    : ${features.join(', ')}\n`;
-    }
-    textToInsert += `   Saved       : ${savedDate}\n\n`;
-  });
-
-  textToInsert += `${'─'.repeat(60)}\n`;
-
-  const updatedContent = currentContent + textToInsert;
-
-  // ── Step 4: Write updated content back to Drive using upload media API ──
+  // ── Step 3: Overwrite the file content in Drive using upload media API ──
   const updateResponse = await fetch(
     `https://www.googleapis.com/upload/drive/v3/files/${docId}?uploadType=media`,
     {
@@ -817,7 +769,7 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
     throw new Error(`Failed to update database file: ${errMsg}`);
   }
 
-  return newSites.length;
+  return unsyncedCount > 0 ? unsyncedCount : (sites.length > 0 ? 1 : 0);
 }
 
 /**
