@@ -44,11 +44,43 @@ chrome.runtime.onInstalled.addListener((details) => {
         console.log('[Migration] Cleaned driveDocName extensions:', stored.driveDocName, '→', updates.driveDocName);
       }
 
-      // ── Migration: force reset synced: false on all existing records ──
+      // ── Migration: force reset synced: false and clean generic titles on all existing records ──
       const currentSites = stored.sites || [];
       if (currentSites.length > 0) {
-        updates.sites = currentSites.map(s => ({ ...s, synced: false }));
-        console.log('[Migration] Reset synced: false on all existing site records to trigger a full formatting re-sync.');
+        const commonSubdomains = [
+          'www', 'app', 'play', 'account', 'agent', 'docs', 'drive', 
+          'support', 'product', 'mail', 'dev', 'developer', 'admin', 
+          'login', 'signin', 'signup', 'portal', 'view'
+        ];
+        const genericTitles = ['home', 'index', 'app', 'play', 'login', 'signin', 'docs', 'drive', 'welcome', 'untitled', 'web app', 'product', 'support', 'account', 'agent'];
+
+        updates.sites = currentSites.map(s => {
+          let updatedTitle = s.title;
+          const currentTitleClean = (s.title || '').trim();
+
+          if (!currentTitleClean || genericTitles.includes(currentTitleClean.toLowerCase())) {
+            try {
+              const urlObj = new URL(s.url);
+              const parts = urlObj.hostname.toLowerCase().replace(/^www\./, '').split('.');
+              if (parts.length > 0) {
+                let brand = parts[0];
+                if (parts.length >= 3 && commonSubdomains.includes(parts[0])) {
+                  brand = parts[1];
+                } else if (parts.length >= 2 && !commonSubdomains.includes(parts[0])) {
+                  brand = parts[parts.length - 2];
+                }
+                updatedTitle = brand.charAt(0).toUpperCase() + brand.slice(1);
+              }
+            } catch (e) { /* keep original */ }
+          }
+
+          return { 
+            ...s, 
+            title: updatedTitle,
+            synced: false 
+          };
+        });
+        console.log('[Migration] Reset synced: false and cleaned generic titles on all existing site records.');
       }
 
       chrome.storage.local.set(updates, () => {
