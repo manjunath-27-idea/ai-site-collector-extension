@@ -506,16 +506,50 @@ const USEFUL_SCORE_THRESHOLD = 5;
 // ============================================================
 
 /**
- * Format and summarize description to a clean, brief context (max 180 characters)
+ * Format and summarize description to a clean context (max 450 characters)
  */
 function cleanToBriefDescription(desc) {
   if (!desc) return '';
   let clean = desc.replace(/\s+/g, ' ').trim();
-  if (clean.length > 180) {
-    clean = clean.substring(0, 177).trim();
+  if (clean.length > 450) {
+    clean = clean.substring(0, 447).trim();
     clean = clean.replace(/[,;\.\-\s]+$/, '') + '...';
   }
   return clean;
+}
+
+/**
+ * Extract a clean, capitalized brand name from a hostname, ignoring common subdomains
+ */
+function getBrandName(hostname) {
+  if (!hostname) return '';
+  const parts = hostname.toLowerCase().replace(/^www\./, '').split('.');
+  if (parts.length === 0) return '';
+  
+  const commonSubdomains = [
+    'www', 'app', 'play', 'account', 'agent', 'docs', 'drive', 
+    'support', 'product', 'mail', 'dev', 'developer', 'admin', 
+    'login', 'signin', 'signup', 'portal', 'view'
+  ];
+  
+  if (parts.length >= 3 && commonSubdomains.includes(parts[0])) {
+    return parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+  }
+  
+  if (parts.length >= 3) {
+    const last2 = parts[parts.length - 2] + '.' + parts[parts.length - 1];
+    const doubleTlds = ['co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'co.jp', 'com.br', 'com.mx', 'com.au', 'co.in', 'net.in', 'org.in'];
+    if (doubleTlds.includes(last2) && parts.length >= 4) {
+      return parts[parts.length - 3].charAt(0).toUpperCase() + parts[parts.length - 3].slice(1);
+    }
+  }
+  
+  if (parts.length >= 2) {
+    const brand = parts[parts.length - 2];
+    return brand.charAt(0).toUpperCase() + brand.slice(1);
+  }
+  
+  return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
 }
 
 /**
@@ -985,11 +1019,15 @@ function sendPageData() {
       if (classification.name) {
         metadata.title = classification.name;
       } else {
-        try {
-          const h = new URL(metadata.url).hostname.replace(/^www\./, '');
-          const seg = h.split('.')[0];
-          metadata.title = seg.charAt(0).toUpperCase() + seg.slice(1);
-        } catch { /* keep original */ }
+        // Keep descriptive original page title, fall back to clean brand name if page title is generic
+        const originalTitle = (metadata.title || '').trim();
+        const genericTitles = ['home', 'index', 'app', 'play', 'login', 'signin', 'docs', 'drive', 'welcome', 'untitled', 'web app', 'product', 'support', 'account', 'agent'];
+        if (!originalTitle || genericTitles.includes(originalTitle.toLowerCase())) {
+          try {
+            const h = new URL(metadata.url).hostname;
+            metadata.title = getBrandName(h);
+          } catch { /* keep original */ }
+        }
       }
       // Prioritize live extracted page description over static database description
       const hasLiveDesc = metadata.description && metadata.description.trim().length > 0;
