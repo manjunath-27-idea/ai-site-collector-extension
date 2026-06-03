@@ -26,6 +26,49 @@
 
 ---
 
+## v3.4.x — Title Cleanup & Description Refinement (2026-06-02)
+
+### What Changed
+
+#### Auto-Clean Generic Titles on Startup Migration
+- Background `onStartup` migration now scans all stored records and resets generic/placeholder titles (`"Home"`, `"Welcome"`, `"Dashboard"`, `"Index"`, `"Untitled"`, `""`) to `null`.
+- On next visit to the site, the real branded title is re-fetched.
+
+#### Description Limit Raised to 450 Characters
+- `content.js` description character limit increased from 300 → **450 characters** for richer context.
+- Title candidate ranking now prefers the longest OG/meta title containing a known brand keyword, falling back to `document.title`.
+
+---
+
+## v3.3.x — Google Drive Folder Sync & Sync Status Indicators (2026-05-31)
+
+### What Changed
+
+#### Dedicated Google Drive Folder
+- Extension creates (or discovers) a **`AI Site Collector`** folder in Google Drive root.
+- All sync operations are scoped to this folder — no clutter in Drive root.
+- Folder ID is cached in `chrome.storage.local` for fast future syncs; cleared on sign-out.
+
+#### Dynamic Sync Status Indicators
+- Sync cycle buttons in both the popup and options sidebar dynamically change color:
+  - 🟠 **Orange** `#f97316` when there are unsynced pending sites (badge shows count)
+  - 🟢 **Green** `#22c55e` when all records are fully synced (badge shows `✓`)
+- On successful sync, all records in local storage are correctly marked `synced: true`.
+
+#### Continuous Site Upgrades
+- Existing records that receive enriched descriptions or new feature tags on rescan are marked `synced: false` automatically.
+- Auto-sync triggers to push the update to Drive without user action.
+
+#### Notification Timing Fix
+- Desktop notification for Drive sync now only fires **after** the upload completes, not when it begins.
+
+#### Popup Site Card Polish
+- Fixed layout overflow (`flex-shrink: 0` on `.site-item`).
+- Removed description text from popup site cards — list is cleaner; full description visible in the Options Dashboard only.
+- Increased card corner radius; adjusted popup viewport size for smaller screens.
+
+---
+
 ## v3.2.0 — Google Docs Format Enforcement (2026-05-29)
 
 ### What Changed
@@ -188,5 +231,6 @@ Added `"pentest.ai"` and `"pentesting.ai"` to `known_ai_domains`.
 
 ---
 
-**Repository:** https://github.com/manjunath-27-idea/ai-site-collector-extension  
-**Last Updated:** 2026-05-29
+**Repository:** https://github.com/manjunath-27-idea/ai-site-collector-extension
+**Last Updated:** 2026-06-03
+**Current Version:** 3.4.9
