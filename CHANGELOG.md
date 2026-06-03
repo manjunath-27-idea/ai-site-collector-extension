@@ -4,6 +4,33 @@ All notable changes to this project are documented here, ordered newest-first.
 
 ---
 
+## [v3.5.0] — 2026-06-04
+
+**Commit:** `f319eb5` — *fix: preserve driveDocId on sign-out and guard against Drive wipe when local sites is empty*
+
+### 🐛 Critical Bug Fixes
+
+#### Drive Document Wiped on Re-login
+**Root cause (2 bugs combined):**
+
+1. **Sign-out cleared `driveDocId`** — `logout()` in both `popup.js` and `options.js` was setting `driveDocId: null`, `driveDocName: null`, `driveFolderId: null`. On re-login, the extension had no memory of the existing Drive file. During the brief race window before `getOrCreateDefaultDoc()` completed its Drive search, the first auto-sync fired with `docId = null` — which triggered creation of a **brand new blank document**.
+
+2. **Format auditor wiped doc when local sites was empty** — `doesDocMatchFormat()` in `background.js` had logic that said: *"if local sites array is empty but the Drive doc has URLs → trigger full rebuild"*. This sounds like a deletion sync, but it's actually a **catastrophic race condition** — local storage can be empty for a few milliseconds right after sign-in before the sites array is loaded. This caused the Drive doc to be deleted and rewritten from an empty array.
+
+**Fix:**
+- `popup.js` and `options.js` `logout()` now only clears auth state (`authToken`, `isAuthenticated`, `userEmail`). Drive file references (`driveDocId`, `driveDocName`, `driveFolderId`) are **preserved across sign-out** — re-login reuses the same file instantly.
+- `doesDocMatchFormat()` in `background.js` now **never triggers a wipe when local sites is empty**. An empty local array is treated as "nothing to sync" not "user deleted everything".
+
+### 📁 Files Changed
+| File | Change |
+|---|---|
+| `popup/popup.js` | `logout()` preserves `driveDocId`, `driveDocName`, `driveFolderId` |
+| `options/options.js` | Same fix |
+| `js/background.js` | `doesDocMatchFormat()` safety guard — returns `true` when `sites.length === 0` |
+| `manifest.json` | Version bumped `3.4.9` → `3.5.0` |
+
+---
+
 ## [v3.4.9] — 2026-06-03
 
 **Commit:** `eb3dd45` — *Implement Suffix-Based Field Locking, Sentence-Based Description Merging, and Git Reload Panel*

@@ -2,6 +2,28 @@
 
 ---
 
+## v3.5.0 — Critical Drive Wipe Fix (2026-06-04)
+
+### What Changed
+
+#### 🔴 Drive Document No Longer Wiped on Re-login
+Two bugs combined to erase the entire Google Drive database whenever the user signed out and back in:
+
+**Bug 1 — Sign-out cleared Drive doc ID**
+- `logout()` was setting `driveDocId: null` and `driveFolderId: null` in `chrome.storage.local`.
+- On re-login, the extension had no memory of the existing file, so it created a **brand new blank document** before the Drive search could complete.
+
+**Bug 2 — Format auditor wiped doc during race condition**
+- `doesDocMatchFormat()` had logic: *"local sites empty + doc has URLs = user deleted everything → wipe doc"*
+- But local storage can be empty for milliseconds right after sign-in (race condition).
+- This triggered a full delete-and-rewrite of the Drive doc from an empty array — destroying all saved data.
+
+**What's fixed:**
+- Sign-out now only clears `authToken`, `isAuthenticated`, and `userEmail`. The Drive file ID, folder ID, and doc name are **preserved** — re-login connects back to the same existing document instantly.
+- `doesDocMatchFormat()` now has a safety guard: if local sites array is empty, it **never triggers a wipe**. An empty local array means "nothing to sync", not "user deleted everything".
+
+---
+
 ## v3.4.9 — Granular Suffix Field Locking, Sentence Merging, and Git Reload Panel (2026-06-03)
 
 ### What Changed
