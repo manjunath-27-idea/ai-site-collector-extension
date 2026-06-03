@@ -930,13 +930,12 @@ function logout() {
                     console.log('Cached auth token cleared.');
                 });
             }
+            // Keep driveDocId, driveDocName and driveFolderId across sign-out so re-login
+            // reuses the same Drive file instead of creating a new (blank) one.
             chrome.storage.local.set({
                 isAuthenticated: false,
                 authToken: null,
-                userEmail: null,
-                driveDocId: null,
-                driveDocName: null,
-                driveFolderId: null
+                userEmail: null
             }, () => {
                 checkAuthStatus();
                 if (typeof settingsModal !== 'undefined' && settingsModal) {

@@ -1403,12 +1403,11 @@ function doesDocMatchFormat(content, sites) {
   if (!content || content.trim().length === 0) return true;
   
   if (sites.length === 0) {
-    // If local database is empty but the Google Doc contains saved sites, trigger a rebuild to sync deletion
-    const hasUrls = content.includes('   URL         : ');
-    if (hasUrls) {
-      console.log('[Format Audit] Local database is empty but Google Doc has site records. Triggering sync rebuild...');
-      return false;
-    }
+    // SAFETY GUARD: Never trigger a full doc wipe when local sites array is empty.
+    // This can happen as a race condition right after sign-in before storage is loaded,
+    // or if the user cleared local sites manually. Wiping the Drive doc in this case
+    // would destroy all historical data. Return true = no rebuild needed.
+    console.log('[Format Audit] Local database is empty — skipping wipe to protect Drive data.');
     return true;
   }
 
