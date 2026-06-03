@@ -177,40 +177,62 @@ ai-site-collector-ext/
 ### Prerequisites
 - Google Chrome 88+ (or Chromium-based browsers: Edge, Brave, Opera)
 - A Google account to sync collections with your Google Drive
+- [Git](https://git-scm.com/) installed (recommended — enables the built-in update workflow)
 
-### Detailed Setup Steps
+### Setup Steps
 
-1. **Clone or Download the Extension:**
+> **No OAuth setup or `manifest.json` editing required.** The extension ships with a pre-configured OAuth client and a pinned `"key"` field — just clone, load, and sign in.
+
+1. **Clone the Repository:**
    ```bash
    git clone https://github.com/manjunath-27-idea/ai-site-collector-extension.git
    ```
 
-2. **Configure Google OAuth Credentials:**
-   - Follow the comprehensive guide in `SETUP_OAUTH.md`.
-   - Go to the [Google Cloud Console](https://console.cloud.google.com/).
-   - Create a project and enable the **Google Drive API** and **Google Docs API**.
-   - Configure the OAuth Consent Screen and create an **OAuth Client ID** (Chrome Extension type).
-   - Copy the generated Client ID.
-
-3. **Update `manifest.json`:**
-   - Open `manifest.json` in the root folder.
-   - Replace the `"client_id"` value:
-     ```json
-     "oauth2": {
-       "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
-       "scopes": [ ... ]
-     }
-     ```
-
-4. **Load the Extension in Developer Mode:**
-   - Navigate to `chrome://extensions/`
+2. **Load the Extension in Developer Mode:**
+   - Open a new tab and go to `chrome://extensions/`
    - Enable **Developer mode** (top-right toggle)
-   - Click **Load unpacked** and select the `ai-site-collector-ext` folder
+   - Click **Load unpacked**
+   - Select the cloned `ai-site-collector-extension` folder
+   - The extension icon appears in your Chrome toolbar
 
-5. **Authenticate & Link Google Drive:**
+3. **Authenticate & Link Google Drive:**
    - Click the extension icon → **Sign in with Google**
-   - Complete OAuth consent
-   - The extension auto-creates `AI_Site_Collector_Database.md` in `AI Site Collector` folder on Drive
+   - Complete the OAuth consent screen (grants Drive file access only)
+   - The extension automatically creates `AI_Site_Collector_Database.md` inside an `AI Site Collector` folder in your Drive
+
+That's it — the extension is live and collecting sites immediately.
+
+---
+
+## Updating the Extension
+
+This extension uses a **`.pem`-derived manifest `"key"`** to lock the Chrome Extension ID permanently. This means:
+
+- The extension always loads with the **same Chrome ID** across clones, reloads, and `git pull` updates.
+- Your stored site data, settings, and Google Drive links are **never broken** by an update.
+- You **never need to re-authenticate** after pulling updates.
+
+### How to Pull & Apply Updates
+
+**Step 1 — Pull the latest code from GitHub:**
+```bash
+git pull origin main
+```
+
+**Step 2 — Reload the extension inside Chrome:**
+
+You don't need to go to `chrome://extensions/` manually. The extension has a built-in **Developer Updates** panel:
+
+- Open the popup (click the extension icon) → go to **Settings**
+- Or open the **Options Dashboard** → go to **Settings & Drive** tab
+- Find the **"Developer Updates"** card — it shows:
+  - ✅ Your currently installed version
+  - 🔄 The latest version available on GitHub (fetched live)
+  - An **"Update available — run `git pull`"** alert if the remote is ahead
+- Click **Reload Extension** → the extension instantly restarts with the new code, no tab refresh needed
+
+### Version Checking
+The version comparator fetches the raw `manifest.json` from the GitHub repository and compares the `"version"` field to the locally installed version. If they differ, a warning banner appears — run `git pull`, then click **Reload Extension**.
 
 ---
 
