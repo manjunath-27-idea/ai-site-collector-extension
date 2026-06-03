@@ -4,6 +4,28 @@ All notable changes to this project are documented here, ordered newest-first.
 
 ---
 
+## [v3.5.1] — 2026-06-04
+
+**Commit:** `6e08d83` — *fix: bump version to 3.5.1 and fix Manifest V3 remote update check & toolbar icon*
+
+### 🐛 Critical Bug Fixes
+
+#### Remote Git Version Checker Fix (Manifest V3 Compliance)
+- Delegated the raw GitHub manifest fetch call from page UI files (`options.js` and `popup.js`) to the background service worker `background.js` via a new `'checkGitUpdates'` message action handler. This avoids MV3 Content Security Policy (CSP) blocking on extension UI documents.
+
+#### Extension Toolbar Icon Visibility Fix
+- Added `"default_icon"` configuration inside the `"action"` block of `manifest.json` to ensure the themed neon AI icons render correctly on all browser profile toolbars.
+
+### 📁 Files Changed
+| File | Change |
+|---|---|
+| `js/background.js` | Added `'checkGitUpdates'` message listener to perform background fetch |
+| `options/options.js` | Refactored `checkGitUpdates()` to use `chrome.runtime.sendMessage` |
+| `popup/popup.js` | Refactored `checkGitUpdates()` to use `chrome.runtime.sendMessage` |
+| `manifest.json` | Explicitly declared `default_icon` inside `action` and bumped version to `3.5.1` |
+
+---
+
 ## [v3.5.0] — 2026-06-04
 
 **Commit:** `f319eb5` — *fix: preserve driveDocId on sign-out and guard against Drive wipe when local sites is empty*
@@ -263,5 +285,5 @@ All notable changes to this project are documented here, ordered newest-first.
 ---
 
 **Repository:** https://github.com/manjunath-27-idea/ai-site-collector-extension
-**Current Version:** 3.4.9
-**Last Updated:** 2026-06-03
+**Current Version:** 3.5.1
+**Last Updated:** 2026-06-04

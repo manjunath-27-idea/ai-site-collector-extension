@@ -2,6 +2,20 @@
 
 ---
 
+## v3.5.1 — Remote Update Check & Toolbar Icon Fix (2026-06-04)
+
+### What Changed
+
+#### 🌐 Remote Git Version Checker Fixed
+- Moved the raw GitHub manifest fetch out of the UI pages (`options.js` and `popup.js`) and into the background service worker (`background.js`) via a message passing proxy (`chrome.runtime.sendMessage`).
+- This completely bypasses Manifest V3 page-level Content Security Policy (CSP) fetch restrictions that block direct remote requests from extension UI contexts.
+
+#### 🎨 Extension Action Toolbar Icon Fixed
+- Added the explicit `"default_icon"` configuration inside the `"action"` block of `manifest.json`.
+- This ensures the themed AI neon icons (16px, 48px, 128px) render correctly in the browser's extension toolbar and action menus across all Chrome user profiles.
+
+---
+
 ## v3.5.0 — Critical Drive Wipe Fix (2026-06-04)
 
 ### What Changed
@@ -254,5 +268,5 @@ Added `"pentest.ai"` and `"pentesting.ai"` to `known_ai_domains`.
 ---
 
 **Repository:** https://github.com/manjunath-27-idea/ai-site-collector-extension
-**Last Updated:** 2026-06-03
-**Current Version:** 3.4.9
+**Last Updated:** 2026-06-04
+**Current Version:** 3.5.1

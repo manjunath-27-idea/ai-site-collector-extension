@@ -4,10 +4,12 @@
 
 ---
 
-## Recent Updates (v3.4.9)
+## Recent Updates (v3.5.1)
 
-Our latest update brings granular field-level locking, intelligent description merging, and a built-in developer reload panel:
+Our latest update brings critical stability fixes for Manifest V3, granular field-level locking, intelligent description merging, and a developer reload panel:
 
+- **🌐 Manifest V3 Remote Check Fix** — Refactored the update comparator to query via background script message-passing, avoiding page-level CSP fetch constraints.
+- **🎨 Fixed Action Toolbar Icon** — Added explicit `default_icon` configuration in `manifest.json` for proper themed rendering on all browser profiles.
 - **🔒 Suffix-Based Field Locking** — Lock any individual field (Title, Description, Features, Classification) against auto-updates by clicking its inline `*` indicator. Locked fields end with ` *` in storage; overridden fields end with ` **`. The background scraper skips updating locked fields entirely.
 - **📝 Sentence-Based Description Merging** — When a site is rescanned, new description sentences are merged into the existing description sentence-by-sentence (case-insensitive union), never overwriting user edits.
 - **🔄 Developer Git Updates Panel** — A dedicated card in Settings fetches the remote GitHub `manifest.json` and compares the version number to alert you to available updates. A **Reload Extension** button triggers `chrome.runtime.reload()` instantly.
@@ -23,10 +25,10 @@ Our latest update brings granular field-level locking, intelligent description m
 | Intelligent 5-step AI classifier | ✅ Active |
 | Static Knowledge Base (500+ AI tools) | ✅ Active |
 | Dynamic domain rules from GitHub | ✅ Active |
-| Granular suffix-based field locking | ✅ Active (v3.4.9) |
-| Sentence-based description merging | ✅ Active (v3.4.9) |
-| Developer git update checker & reload | ✅ Active (v3.4.9) |
-| Stable extension ID via manifest key | ✅ Active (v3.4.9) |
+| Granular suffix-based field locking | ✅ Active (v3.5.1) |
+| Sentence-based description merging | ✅ Active (v3.5.1) |
+| Developer git update checker & reload | ✅ Active (v3.5.1) |
+| Stable extension ID via manifest key | ✅ Active (v3.5.1) |
 | Dedicated Google Drive folder (`AI Site Collector`) | ✅ Active |
 | Auto-sync on site discovery | ✅ Active |
 | Sync status badges (orange count / green ✓) | ✅ Active |
@@ -77,7 +79,7 @@ Any page matching known auth gateways or login URL patterns (`/login`, `/auth`, 
 
 ---
 
-## 🔒 Field Locking System (v3.4.9)
+## 🔒 Field Locking System (v3.5.1)
 
 The extension supports **granular, field-level locking** — you can lock just the title, just a specific description sentence, or just the features list, without locking the whole card.
 
@@ -297,4 +299,4 @@ In Settings, the **Developer Updates** card shows:
 This project is provided as-is for personal use.
 
 **Repository:** https://github.com/manjunath-27-idea/ai-site-collector-extension
-**Current Version:** 3.4.9
+**Current Version:** 3.5.1
