@@ -412,7 +412,11 @@ const AI_KNOWLEDGE_BASE = [
 
   { domains: ['axiom.ai'], name: 'Axiom.ai', category: 'useful',
     description: "Browser automation tool  -  build web bots and automate workflows without code.",
-    tags: ['automation','productivity','no-code'] }
+    tags: ['automation','productivity','no-code'] },
+
+  { domains: ['getastra.com', 'astrasec.ai'], name: 'Astra Security', category: 'useful',
+    description: "Cybersecurity platform providing continuous pentesting, vulnerability assessments, and security audits.",
+    tags: ['security', 'pentest', 'vulnerability', 'useful'] }
 ];
 
 // ============================================================
@@ -645,16 +649,34 @@ function isAuthenticationOrSystemPage(metadata, remoteAuthList) {
     '/sign-in', '/sign-up', '/log-in', '/log-out', '/session/new', '/join'
   ];
 
+  const systemPathKeywords = [
+    '/checkout', '/payment', '/donate', '/billing', '/invoice', 
+    '/receipt', '/subscribe', '/cart', '/pay', '/donation'
+  ];
+
   try {
     const urlObj = new URL(metadata.url);
     const pathLower = urlObj.pathname.toLowerCase();
     const queryLower = urlObj.search.toLowerCase();
+    const hostname = urlObj.hostname.toLowerCase();
 
-    // Exact path segment match
+    // Ignore payment processors
+    const paymentHosts = ['razorpay.com', 'stripe.com', 'paypal.com', 'chargify.com', 'paddle.com', '2checkout.com', 'paytm.com', 'authorize.net'];
+    if (paymentHosts.some(h => hostname === h || hostname.endsWith('.' + h))) return true;
+
+    // Exact path segment or starts-with match for authentication
     if (authPathSegments.some(seg =>
       pathLower === seg ||
       pathLower.startsWith(seg + '/') ||
       pathLower.startsWith(seg + '?')
+    )) return true;
+
+    // Path segment match for payment/system subpages
+    if (systemPathKeywords.some(kw =>
+      pathLower === kw ||
+      pathLower.startsWith(kw + '/') ||
+      pathLower.startsWith(kw + '?') ||
+      pathLower.includes(kw)
     )) return true;
 
     // Auth-flavoured query params
@@ -662,11 +684,13 @@ function isAuthenticationOrSystemPage(metadata, remoteAuthList) {
         queryLower.includes('mode=signin') ||
         queryLower.includes('redirect_to=/login')) return true;
 
-    const hostname = urlObj.hostname.toLowerCase();
-
-    // Auth subdomains
+    // Auth/account subdomains
     if (hostname.startsWith('auth.') ||
         hostname.startsWith('login.') ||
+        hostname.startsWith('signin.') ||
+        hostname.startsWith('signup.') ||
+        hostname.startsWith('sso.') ||
+        hostname.startsWith('account.') ||
         hostname.startsWith('accounts.')) return true;
 
     // Remote gateway list (exact or subdomain)
@@ -678,13 +702,16 @@ function isAuthenticationOrSystemPage(metadata, remoteAuthList) {
     }
   } catch {
     if (authPathSegments.some(seg => metadata.url.toLowerCase().includes(seg))) return true;
+    if (systemPathKeywords.some(seg => metadata.url.toLowerCase().includes(seg))) return true;
   }
 
   // Strict title checks
   const authTitlePhrases = [
     'log in to ', 'sign in to ', 'sign up for ', 'create your account',
     'forgot password', 'reset your password', 'two-factor authentication',
-    'verification required', 'authentication required', 'enter your password'
+    'verification required', 'authentication required', 'enter your password',
+    'sso login', 'saml login', 'payment details', 'checkout', 'donation form',
+    'razorpay checkout', 'stripe checkout'
   ];
   if (authTitlePhrases.some(p => title.includes(p))) return true;
 
@@ -1013,31 +1040,45 @@ function sendPageData() {
 
     if (!classification.isAI && !classification.isUseful && !classification.isAgency) return;
 
-    // For AI and Agency pages: strip to root origin and use KB name / clean description
-    if (classification.isAI || classification.isAgency) {
-      metadata.url = cleanToMainDomain(metadata.url);
-      if (classification.name) {
-        metadata.title = classification.name;
-      } else {
-        // Keep descriptive original page title, fall back to clean brand name if page title is generic
-        const originalTitle = (metadata.title || '').trim();
-        const genericTitles = ['home', 'index', 'app', 'play', 'login', 'signin', 'docs', 'drive', 'welcome', 'untitled', 'web app', 'product', 'support', 'account', 'agent'];
-        if (!originalTitle || genericTitles.includes(originalTitle.toLowerCase())) {
-          try {
-            const h = new URL(metadata.url).hostname;
-            metadata.title = getBrandName(h);
-          } catch { /* keep original */ }
+    // Normalize URL to main domain (excluding code repositories) to prevent duplicate subpage conflicts
+    const isCodeRepo = metadata.url.toLowerCase().includes('github.com') || metadata.url.toLowerCase().includes('gitlab.com');
+    if (!isCodeRepo) {
+      let cleanedUrl = cleanToMainDomain(metadata.url);
+      try {
+        const urlObj = new URL(cleanedUrl);
+        if (urlObj.hostname === 'astrasec.ai' || urlObj.hostname.endsWith('.astrasec.ai')) {
+          cleanedUrl = 'https://www.getastra.com/';
         }
+      } catch (e) {}
+      metadata.url = cleanedUrl;
+    }
+
+    if (classification.name) {
+      metadata.title = classification.name;
+    } else {
+      // Keep descriptive original page title, fall back to clean brand name if page title is generic
+      const originalTitle = (metadata.title || '').trim();
+      const genericTitles = ['home', 'index', 'app', 'play', 'login', 'signin', 'docs', 'drive', 'welcome', 'untitled', 'web app', 'product', 'support', 'account', 'agent'];
+      if (!originalTitle || genericTitles.includes(originalTitle.toLowerCase())) {
+        try {
+          const h = new URL(metadata.url).hostname;
+          metadata.title = getBrandName(h);
+        } catch { /* keep original */ }
       }
-      // Prioritize live extracted page description over static database description
-      const hasLiveDesc = metadata.description && metadata.description.trim().length > 0;
-      if (!hasLiveDesc) {
-        if (classification.description) {
-          metadata.description = classification.description;
+    }
+
+    // Prioritize live extracted page description over static database description
+    const hasLiveDesc = metadata.description && metadata.description.trim().length > 0;
+    if (!hasLiveDesc) {
+      if (classification.description) {
+        metadata.description = classification.description;
+      } else {
+        if (classification.isAgency) {
+          metadata.description = 'Agency platform  -  detected by domain or keyword analysis.';
+        } else if (classification.isAI) {
+          metadata.description = 'AI platform  -  detected by domain or keyword analysis.';
         } else {
-          metadata.description = classification.isAgency 
-            ? 'Agency platform  -  detected by domain or keyword analysis.' 
-            : 'AI platform  -  detected by domain or keyword analysis.';
+          metadata.description = 'Useful tool  -  detected by domain or keyword analysis.';
         }
       }
     }

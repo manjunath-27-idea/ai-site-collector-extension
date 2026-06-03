@@ -4,6 +4,238 @@
  * Single document mode: All sites appended to one selected document
  */
 
+/**
+ * Check if the page is an authentication / payment portal system page
+ */
+function isAuthOrSystemUrl(urlStr, titleStr) {
+  const title = (titleStr || '').toLowerCase();
+  const authPathSegments = [
+    '/login', '/signin', '/signup', '/register',
+    '/oauth', '/authorize', '/logout', '/signout',
+    '/reset-password', '/forgot-password', '/mfa', '/2fa',
+    '/sign-in', '/sign-up', '/log-in', '/log-out', '/session/new', '/join'
+  ];
+  const systemPathKeywords = [
+    '/checkout', '/payment', '/donate', '/billing', '/invoice', 
+    '/receipt', '/subscribe', '/cart', '/pay', '/donation'
+  ];
+
+  try {
+    const urlObj = new URL(urlStr);
+    const pathLower = urlObj.pathname.toLowerCase();
+    const queryLower = urlObj.search.toLowerCase();
+    const hostname = urlObj.hostname.toLowerCase();
+
+    const paymentHosts = ['razorpay.com', 'stripe.com', 'paypal.com', 'chargify.com', 'paddle.com', '2checkout.com', 'paytm.com', 'authorize.net'];
+    if (paymentHosts.some(h => hostname === h || hostname.endsWith('.' + h))) return true;
+
+    if (authPathSegments.some(seg =>
+      pathLower === seg ||
+      pathLower.startsWith(seg + '/') ||
+      pathLower.startsWith(seg + '?')
+    )) return true;
+
+    if (systemPathKeywords.some(kw =>
+      pathLower === kw ||
+      pathLower.startsWith(kw + '/') ||
+      pathLower.startsWith(kw + '?') ||
+      pathLower.includes(kw)
+    )) return true;
+
+    if (queryLower.includes('action=login') ||
+        queryLower.includes('mode=signin') ||
+        queryLower.includes('redirect_to=/login')) return true;
+
+    if (hostname.startsWith('auth.') ||
+        hostname.startsWith('login.') ||
+        hostname.startsWith('signin.') ||
+        hostname.startsWith('signup.') ||
+        hostname.startsWith('sso.') ||
+        hostname.startsWith('account.') ||
+        hostname.startsWith('accounts.')) return true;
+  } catch (e) {
+    if (authPathSegments.some(seg => urlStr.toLowerCase().includes(seg))) return true;
+    if (systemPathKeywords.some(seg => urlStr.toLowerCase().includes(seg))) return true;
+  }
+
+  const authTitlePhrases = [
+    'log in to ', 'sign in to ', 'sign up for ', 'create your account',
+    'forgot password', 'reset your password', 'two-factor authentication',
+    'verification required', 'authentication required', 'enter your password',
+    'sso login', 'saml login', 'payment details', 'checkout', 'donation form',
+    'razorpay checkout', 'stripe checkout'
+  ];
+  if (authTitlePhrases.some(p => title.includes(p))) return true;
+
+  return false;
+}
+
+/**
+ * Check if a description is a default fallback or empty
+ */
+function isFallbackDesc(desc) {
+  const d = (desc || '').trim().toLowerCase();
+  return d.includes('detected by domain or keyword') || 
+         d === 'no description available.' || 
+         d === 'no description available' || 
+         d === '';
+}
+
+/**
+ * Merge two description strings sentence by sentence to append points instead of overriding
+ */
+function mergeDescriptions(desc1, desc2) {
+  const getSentences = (desc) => {
+    if (!desc) return [];
+    const clean = desc.replace(/[\n\r\t]+/g, ' ').trim();
+    // Split on typical sentence boundaries followed by space and capital letter or digit
+    const list = clean.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+    return list.map(s => s.trim()).filter(s => s.length > 0);
+  };
+
+  const s1 = getSentences(desc1);
+  const s2 = getSentences(desc2);
+
+  // Union sentences case-insensitively, keeping the first occurrence
+  const merged = [...s1];
+  const normalizedS1 = s1.map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+  s2.forEach(sentence => {
+    const norm = sentence.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!normalizedS1.includes(norm)) {
+      merged.push(sentence);
+      normalizedS1.push(norm);
+    }
+  });
+
+  return merged.join(' ');
+}
+
+/**
+ * Merge two keyword arrays case-insensitively, preserving original casing
+ */
+function mergeKeywords(kw1, kw2) {
+  const k1 = kw1 || [];
+  const k2 = kw2 || [];
+  const merged = [...k1];
+  const normalizedK1 = k1.map(k => k.toLowerCase().trim());
+
+  k2.forEach(kw => {
+    const norm = kw.toLowerCase().trim();
+    if (!normalizedK1.includes(norm) && norm.length > 0) {
+      merged.push(kw.trim());
+      normalizedK1.push(norm);
+    }
+  });
+  return merged;
+}
+
+/**
+ * Suffix-based field locking helper functions
+ */
+function isFieldLockedOrOverridden(val) {
+  if (!val) return false;
+  if (Array.isArray(val)) {
+    return val.some(item => typeof item === 'string' && (item.trim().endsWith('*') || item.trim().endsWith('**')));
+  }
+  if (typeof val === 'object') {
+    return isFieldLockedOrOverridden(val.label);
+  }
+  const str = String(val).trim();
+  return str.endsWith('*') || str.endsWith('**');
+}
+
+function isFieldLocked(val) {
+  if (!val) return false;
+  if (Array.isArray(val)) {
+    return val.some(item => typeof item === 'string' && item.trim().endsWith('*') && !item.trim().endsWith('**'));
+  }
+  if (typeof val === 'object') {
+    return isFieldLocked(val.label);
+  }
+  const str = String(val).trim();
+  return str.endsWith('*') && !str.endsWith('**');
+}
+
+function isFieldOverridden(val) {
+  if (!val) return false;
+  if (Array.isArray(val)) {
+    return val.some(item => typeof item === 'string' && item.trim().endsWith('**'));
+  }
+  if (typeof val === 'object') {
+    return isFieldOverridden(val.label);
+  }
+  const str = String(val).trim();
+  return str.endsWith('**');
+}
+
+function cleanFieldLockSuffix(val) {
+  if (!val) return val;
+  if (Array.isArray(val)) {
+    return val.map(cleanFieldLockSuffix).filter(item => item !== '*' && item !== '**' && item !== '');
+  }
+  if (typeof val === 'object') {
+    const cleaned = { ...val };
+    if (cleaned.label) cleaned.label = cleanFieldLockSuffix(cleaned.label);
+    if (cleaned.tags) cleaned.tags = cleaned.tags.map(cleanFieldLockSuffix);
+    if (cleaned.reasons) cleaned.reasons = cleaned.reasons.map(cleanFieldLockSuffix);
+    return cleaned;
+  }
+  return String(val).replace(/\s*\*\*?$/, '');
+}
+
+function applyFieldLockSuffix(val, suffix) {
+  if (!val) return val;
+  if (Array.isArray(val)) {
+    const cleaned = cleanFieldLockSuffix(val);
+    if (suffix && cleaned.length > 0) {
+      cleaned[cleaned.length - 1] = cleaned[cleaned.length - 1] + suffix;
+    }
+    return cleaned;
+  }
+  if (typeof val === 'object') {
+    const cleaned = { ...val };
+    if (cleaned.label) {
+      cleaned.label = applyFieldLockSuffix(cleaned.label, suffix);
+    }
+    return cleaned;
+  }
+  const cleaned = String(val).replace(/\s*\*\*?$/, '');
+  return cleaned + suffix;
+}
+
+function syncFieldLocksAndTexts(site) {
+  if (!site) return site;
+  if (!site.lockedFields) site.lockedFields = {};
+  if (!site.overriddenFields) site.overriddenFields = {};
+
+  const fieldsToCheck = ['title', 'description', 'keywords', 'classification'];
+  fieldsToCheck.forEach(field => {
+    const isLocked = site.lockedFields[field];
+    const isOverridden = site.overriddenFields[field];
+    
+    let suffix = '';
+    if (isLocked) suffix = ' *';
+    else if (isOverridden) suffix = ' **';
+    
+    if (field === 'classification') {
+      if (site.classification && site.classification.label) {
+        site.classification.label = cleanFieldLockSuffix(site.classification.label) + suffix;
+      }
+    } else if (field === 'keywords') {
+      if (site.keywords && Array.isArray(site.keywords) && site.keywords.length > 0) {
+        site.keywords = cleanFieldLockSuffix(site.keywords);
+        if (suffix) {
+          site.keywords[site.keywords.length - 1] = site.keywords[site.keywords.length - 1] + suffix;
+        }
+      }
+    } else if (site[field] !== undefined) {
+      site[field] = cleanFieldLockSuffix(site[field]) + suffix;
+    }
+  });
+  return site;
+}
+
 // Initialize storage — only reset user preferences on fresh install, never on reload/update
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
@@ -25,6 +257,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     });
   } else {
     // ── Extension update / reload ──
+    chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html') });
     // 1. One-time migration: strip any stale .txt suffix from driveDocName in storage and force re-sync to apply new formatting
     chrome.storage.local.get(['autoSyncSetting', 'notificationsSetting', 'darkModeSetting', 'driveDocName', 'sites'], (stored) => {
       const updates = {
@@ -44,7 +277,7 @@ chrome.runtime.onInstalled.addListener((details) => {
         console.log('[Migration] Cleaned driveDocName extensions:', stored.driveDocName, '→', updates.driveDocName);
       }
 
-      // ── Migration: force reset synced: false and clean generic titles on all existing records ──
+      // ── Migration: clean, deduplicate, classify and propose updates on existing records ──
       const currentSites = stored.sites || [];
       if (currentSites.length > 0) {
         const commonSubdomains = [
@@ -53,34 +286,261 @@ chrome.runtime.onInstalled.addListener((details) => {
           'login', 'signin', 'signup', 'portal', 'view'
         ];
         const genericTitles = ['home', 'index', 'app', 'play', 'login', 'signin', 'docs', 'drive', 'welcome', 'untitled', 'web app', 'product', 'support', 'account', 'agent'];
+        const genericSubdomains = ['app', 'play', 'account', 'agent', 'docs', 'drive', 'support', 'product', 'login', 'signin', 'portal'];
 
-        updates.sites = currentSites.map(s => {
-          let updatedTitle = s.title;
-          const currentTitleClean = (s.title || '').trim();
+        const cleanToMainDomainLocal = (urlStr) => {
+          try { return new URL(urlStr).origin + '/'; }
+          catch { return urlStr; }
+        };
 
-          if (!currentTitleClean || genericTitles.includes(currentTitleClean.toLowerCase())) {
+        // Step 1: Detect deletes, normalize active URLs, and update classifications for KB entries
+        const processedSites = currentSites.map(s => {
+          let updatedSite = { ...s };
+
+          // 1. Detect if this is an authentication/SSO/payment system page that should be proposed for deletion
+          if (isAuthOrSystemUrl(s.url, s.title)) {
+            updatedSite.pendingUpdate = {
+              ...(s.pendingUpdate || {}),
+              delete: true,
+              reason: 'SSO/System Page conflict'
+            };
+            return updatedSite;
+          }
+
+          // 2. Normalize URL to main domain if not code repository
+          const isCodeRepo = s.url.toLowerCase().includes('github.com') || s.url.toLowerCase().includes('gitlab.com');
+          if (!isCodeRepo) {
+            let cleanedUrl = cleanToMainDomainLocal(s.url);
+            try {
+              const urlObj = new URL(cleanedUrl);
+              const host = urlObj.hostname.toLowerCase();
+              if (host === 'astrasec.ai' || host.endsWith('.astrasec.ai') || host === 'getastra.com' || host.endsWith('.getastra.com')) {
+                cleanedUrl = 'https://www.getastra.com/';
+              }
+            } catch (e) {}
+            updatedSite.url = cleanedUrl;
+          }
+
+          // 3. Category Override: If it's Astra Security, correct category to Useful Tool (KB override)
+          try {
+            const urlObj = new URL(updatedSite.url);
+            const host = urlObj.hostname.toLowerCase();
+            if (host === 'getastra.com' || host.endsWith('.getastra.com')) {
+              updatedSite.classification = {
+                isAI: false,
+                isUseful: true,
+                isAgency: false,
+                label: 'Useful Tool',
+                confidence: 1.0,
+                name: 'Astra Security',
+                description: 'Cybersecurity platform providing continuous pentesting, vulnerability assessments, and security audits.',
+                tags: ['security', 'pentest', 'vulnerability', 'useful'],
+                reasons: ['Verified knowledge base entry']
+              };
+              updatedSite.title = 'Astra Security';
+            }
+          } catch (e) {}
+          syncFieldLocksAndTexts(updatedSite);
+          return updatedSite;
+        });
+
+        // Step 2: Separate deletions and active sites to merge duplicates among active sites
+        const deletions = processedSites.filter(s => s.pendingUpdate && s.pendingUpdate.delete === true);
+        const activeSites = processedSites.filter(s => !s.pendingUpdate || s.pendingUpdate.delete !== true);
+
+        // Group active sites by their normalized URL
+        const groups = {};
+        activeSites.forEach(s => {
+          const key = s.url.toLowerCase();
+          if (!groups[key]) {
+            groups[key] = [];
+          }
+          groups[key].push(s);
+        });
+
+        const mergedActiveSites = [];
+
+        for (const urlKey in groups) {
+          const group = groups[urlKey];
+          if (group.length === 1) {
+            // No duplicate, just process title refinement if needed
+            let s = group[0];
+            let updatedTitle = s.title;
+            const currentTitleClean = (s.title || '').trim();
+
+            // Restore previously migrated generic titles to trigger pending updates review
             try {
               const urlObj = new URL(s.url);
               const parts = urlObj.hostname.toLowerCase().replace(/^www\./, '').split('.');
-              if (parts.length > 0) {
-                let brand = parts[0];
-                if (parts.length >= 3 && commonSubdomains.includes(parts[0])) {
-                  brand = parts[1];
-                } else if (parts.length >= 2 && !commonSubdomains.includes(parts[0])) {
-                  brand = parts[parts.length - 2];
+              if (parts.length >= 3 && genericSubdomains.includes(parts[0])) {
+                const genericTitle = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+                let brand = parts[1];
+                if (parts.length >= 4 && commonSubdomains.includes(parts[1])) {
+                  brand = parts[2];
                 }
-                updatedTitle = brand.charAt(0).toUpperCase() + brand.slice(1);
+                const brandTitle = brand.charAt(0).toUpperCase() + brand.slice(1);
+                
+                if (s.title === brandTitle) {
+                  s.title = genericTitle;
+                  s.pendingUpdate = {
+                    ...(s.pendingUpdate || {}),
+                    title: brandTitle
+                  };
+                  mergedActiveSites.push(s);
+                  continue;
+                }
               }
-            } catch (e) { /* keep original */ }
-          }
+            } catch (e) {}
 
-          return { 
-            ...s, 
-            title: updatedTitle,
-            synced: false 
-          };
+            if (!currentTitleClean || genericTitles.includes(currentTitleClean.toLowerCase())) {
+              try {
+                const urlObj = new URL(s.url);
+                const parts = urlObj.hostname.toLowerCase().replace(/^www\./, '').split('.');
+                if (parts.length > 0) {
+                  let brand = parts[0];
+                  if (parts.length >= 3 && commonSubdomains.includes(parts[0])) {
+                    brand = parts[1];
+                  } else if (parts.length >= 2 && !commonSubdomains.includes(parts[0])) {
+                    brand = parts[parts.length - 2];
+                  }
+                  updatedTitle = brand.charAt(0).toUpperCase() + brand.slice(1);
+                }
+              } catch (e) { /* keep original */ }
+            }
+
+            if (updatedTitle !== s.title) {
+              s.pendingUpdate = {
+                ...(s.pendingUpdate || {}),
+                title: updatedTitle
+              };
+            }
+            mergedActiveSites.push(s);
+          } else {
+            // Group has duplicates! Sort to find the best canonical one
+            group.sort((a, b) => {
+              const fallbackA = isFallbackDesc(a.description);
+              const fallbackB = isFallbackDesc(b.description);
+              if (fallbackA !== fallbackB) {
+                return fallbackA ? 1 : -1;
+              }
+              return (b.description || '').length - (a.description || '').length;
+            });
+
+            // canonical site is group[0]
+            const canonical = { ...group[0] };
+
+            // Merge keywords and tags
+            const allKeywords = new Set();
+            const allTags = new Set(canonical.classification ? canonical.classification.tags || [] : []);
+
+            group.forEach(s => {
+              if (s.keywords) s.keywords.forEach(k => allKeywords.add(k));
+              if (s.classification && s.classification.tags) {
+                s.classification.tags.forEach(t => allTags.add(t));
+              }
+            });
+
+            canonical.keywords = [...allKeywords];
+            if (canonical.classification) {
+              canonical.classification.tags = [...allTags];
+            }
+
+            // Merge descriptions sentence by sentence
+            let mergedDesc = canonical.description || '';
+            group.forEach(s => {
+              if (s !== group[0]) {
+                mergedDesc = mergeDescriptions(mergedDesc, s.description);
+              }
+            });
+            canonical.description = mergedDesc;
+
+            // Combine lockedFields and overriddenFields maps
+            const mergedLockedFields = { ...(canonical.lockedFields || {}) };
+            const mergedOverriddenFields = { ...(canonical.overriddenFields || {}) };
+            group.forEach(s => {
+              if (s.lockedFields) {
+                for (const k in s.lockedFields) {
+                  if (s.lockedFields[k]) {
+                    mergedLockedFields[k] = true;
+                  }
+                }
+              }
+              if (s.overriddenFields) {
+                for (const k in s.overriddenFields) {
+                  if (s.overriddenFields[k]) {
+                    mergedOverriddenFields[k] = true;
+                  }
+                }
+              }
+            });
+            canonical.lockedFields = mergedLockedFields;
+            canonical.overriddenFields = mergedOverriddenFields;
+            syncFieldLocksAndTexts(canonical);
+
+            // Push the merged canonical site to active
+            mergedActiveSites.push(canonical);
+
+            // The remaining sites in the group are duplicates! 
+            // We mark them for deletion but KEEP their original URLs so the user sees exactly what is being removed.
+            for (let i = 1; i < group.length; i++) {
+              const duplicate = { ...group[i] };
+              
+              // Restore its original URL from currentSites to make deletion warning clear
+              const orig = currentSites.find(cs => cs.id === duplicate.id);
+              if (orig) {
+                duplicate.url = orig.url;
+              }
+              
+              duplicate.pendingUpdate = {
+                ...(duplicate.pendingUpdate || {}),
+                delete: true,
+                reason: 'Duplicate/Normalization conflict'
+              };
+              deletions.push(duplicate);
+            }
+        }
+      }
+
+        // Check if any active site has changed properties compared to its original state, and mark as unsynced
+        const nowStr = new Date().toISOString();
+        mergedActiveSites.forEach(s => {
+          const original = currentSites.find(cs => cs.id === s.id);
+          if (original) {
+            const hasChanged = s.url !== original.url || 
+                               s.title !== original.title || 
+                               (s.classification && s.classification.isAI) !== (original.classification && original.classification.isAI) ||
+                               JSON.stringify(s.keywords || []) !== JSON.stringify(original.keywords || []) ||
+                               JSON.stringify(s.classification ? s.classification.tags || [] : []) !== JSON.stringify(original.classification ? original.classification.tags || [] : []);
+            if (hasChanged) {
+              s.synced = false;
+              s.updatedAt = nowStr;
+            }
+          }
         });
-        console.log('[Migration] Reset synced: false and cleaned generic titles on all existing site records.');
+
+        // Combine active and proposed deletions
+        updates.sites = [...mergedActiveSites, ...deletions];
+        console.log('[Migration] Normalized domains, merged duplicates, and stored pending updates for manual user review.');
+
+        // Trigger a system notification if any sites have pending updates after migration
+        const hasPending = updates.sites.some(site => site.pendingUpdate);
+        if (hasPending && stored.notificationsSetting !== false) {
+          chrome.notifications.create('updatePendingNotification', {
+            type: 'basic',
+            iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
+            title: 'Metadata Updates Available',
+            message: 'Some generic titles have been refined. Would you like to accept all changes and sync?',
+            buttons: [
+              { title: 'Accept All & Sync' },
+              { title: 'Review / Options' }
+            ],
+            requireInteraction: true
+          }, () => {
+            if (chrome.runtime.lastError) {
+              console.log('[Notification] Info: ' + chrome.runtime.lastError.message);
+            }
+          });
+        }
       }
 
       chrome.storage.local.set(updates, () => {
@@ -88,6 +548,69 @@ chrome.runtime.onInstalled.addListener((details) => {
       });
     });
   }
+});
+
+/**
+ * Handle notification button clicks to accept all or open options
+ */
+chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+  if (notificationId === 'updatePendingNotification') {
+    if (buttonIndex === 0) {
+      // Accept All & Sync
+      chrome.storage.local.get(['sites', 'notificationsSetting'], (stored) => {
+        const list = stored.sites || [];
+        let updatedCount = 0;
+        const newList = list.map(site => {
+          if (site.pendingUpdate) {
+            updatedCount++;
+            const updatedSite = {
+              ...site,
+              ...site.pendingUpdate,
+              synced: false
+            };
+            delete updatedSite.pendingUpdate;
+            return updatedSite;
+          }
+          return site;
+        });
+
+        if (updatedCount > 0) {
+          chrome.storage.local.set({ sites: newList }, () => {
+            syncToDrive((syncResponse) => {
+              if (stored.notificationsSetting !== false) {
+                if (syncResponse && syncResponse.success) {
+                  chrome.notifications.create({
+                    type: 'basic',
+                    iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
+                    title: 'Updates Applied & Synced!',
+                    message: `Successfully accepted all updates and synced them to Google Drive.`
+                  });
+                } else {
+                  const errMsg = (syncResponse && syncResponse.error) || 'Unknown error';
+                  chrome.notifications.create({
+                    type: 'basic',
+                    iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
+                    title: 'Updates Applied Locally (Sync Failed)',
+                    message: `Updates applied, but Drive sync failed: ${errMsg}`
+                  });
+                }
+              }
+            });
+          });
+        }
+      });
+    } else if (buttonIndex === 1) {
+      // Review / Options
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html') });
+    }
+  }
+});
+
+/**
+ * Handle notification clicks to open the Options Dashboard page
+ */
+chrome.notifications.onClicked.addListener((notificationId) => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('options/index.html') });
 });
 
 /**
@@ -144,11 +667,13 @@ function saveSiteData(siteData, tabId) {
     
     if (existingIndex === -1) {
       // New site: add to collection
+      const nowStr = new Date().toISOString();
       sites.push({
         ...siteData,
         id: generateId(),
         synced: false,
-        savedAt: new Date().toISOString()
+        savedAt: nowStr,
+        updatedAt: nowStr
       });
       
       chrome.storage.local.set({ sites }, () => {
@@ -205,64 +730,79 @@ function saveSiteData(siteData, tabId) {
       let needsUpdate = false;
       const updatedFields = {};
 
-      // 1. Upgrade description if the new one is richer/longer and not a default fallback
+      // 1. Upgrade description if description is not locked or overridden
       const currentDesc = (existing.description || '').trim();
       const newDesc = (siteData.description || '').trim();
       
-      const isFallback = (desc) => 
-        desc.includes('detected by domain or keyword') || 
-        desc === 'No description available.' || 
-        desc === 'No description available';
+      const isDescLocked = (existing.lockedFields && existing.lockedFields.description) || 
+                           (existing.overriddenFields && existing.overriddenFields.description) ||
+                           isFieldLockedOrOverridden(existing.description);
+      if (!isDescLocked) {
+        if (newDesc && newDesc !== currentDesc) {
+          if (isFallbackDesc(currentDesc) && !isFallbackDesc(newDesc)) {
+            // Upgrade from fallback to real description
+            updatedFields.description = newDesc;
+            needsUpdate = true;
+          } else if (!isFallbackDesc(newDesc)) {
+            // Merge descriptions sentence by sentence
+            const merged = mergeDescriptions(currentDesc, newDesc);
+            if (merged !== currentDesc) {
+              updatedFields.description = merged;
+              needsUpdate = true;
+            }
+          }
+        }
+      }
 
-      if (newDesc && newDesc !== currentDesc) {
-        if (isFallback(currentDesc) && !isFallback(newDesc)) {
-          // Upgrade from fallback to real description
-          updatedFields.description = newDesc;
-          needsUpdate = true;
-        } else if (!isFallback(newDesc) && newDesc.length > currentDesc.length) {
-          // Upgrade to longer, more descriptive text
-          updatedFields.description = newDesc;
+      // 2. Upgrade tags/features/keywords if keywords is not locked or overridden
+      const existingKeywords = existing.keywords || [];
+      const newKeywords = siteData.keywords || [];
+      const isKeywordsLocked = (existing.lockedFields && existing.lockedFields.keywords) || 
+                               (existing.overriddenFields && existing.overriddenFields.keywords) ||
+                               isFieldLockedOrOverridden(existing.keywords);
+      if (!isKeywordsLocked) {
+        const mergedKws = mergeKeywords(existingKeywords, newKeywords);
+        if (mergedKws.length > existingKeywords.length) {
+          updatedFields.keywords = mergedKws;
           needsUpdate = true;
         }
       }
 
-      // 2. Upgrade tags/features if new features/keywords exist and have more items
-      const existingKeywords = existing.keywords || [];
-      const newKeywords = siteData.keywords || [];
-      if (newKeywords.length > existingKeywords.length) {
-        updatedFields.keywords = [...new Set([...existingKeywords, ...newKeywords])];
-        needsUpdate = true;
-      }
-
-      // 3. Upgrade title if the new title is richer or cleaner than the old one
+      // 3. Upgrade title if title is not locked or overridden
       const currentTitle = (existing.title || '').trim();
       const newTitle = (siteData.title || '').trim();
-      if (newTitle && newTitle.length > currentTitle.length && !currentTitle.toLowerCase().includes(newTitle.toLowerCase())) {
-        updatedFields.title = newTitle;
-        needsUpdate = true;
+      const isTitleLocked = (existing.lockedFields && existing.lockedFields.title) || 
+                            (existing.overriddenFields && existing.overriddenFields.title) ||
+                            isFieldLockedOrOverridden(existing.title);
+      if (!isTitleLocked) {
+        if (newTitle && newTitle.length > currentTitle.length && !currentTitle.toLowerCase().includes(newTitle.toLowerCase())) {
+          updatedFields.title = newTitle;
+          needsUpdate = true;
+        }
       }
 
-      // 4. Upgrade classification category from non-AI to AI
+      // 4. Upgrade classification category from non-AI to AI if classification is not locked or overridden
       const wasAI = existing.classification && existing.classification.isAI;
       const nowAI = siteData.classification && siteData.classification.isAI;
-      if (!wasAI && nowAI) {
-        updatedFields.classification = siteData.classification;
-        needsUpdate = true;
+      const isClassLocked = (existing.lockedFields && existing.lockedFields.classification) || 
+                            (existing.overriddenFields && existing.overriddenFields.classification) ||
+                            isFieldLockedOrOverridden(existing.classification);
+      if (!isClassLocked) {
+        if (!wasAI && nowAI) {
+          updatedFields.classification = siteData.classification;
+          needsUpdate = true;
+        }
       }
 
       if (needsUpdate) {
         sites[existingIndex] = {
           ...existing,
-          ...updatedFields,
-          synced: false, // Mark as unsynced so it triggers a backup update!
-          updatedAt: new Date().toISOString()
-        };
-        chrome.storage.local.set({ sites }, () => {
-          // Auto-sync if enabled so the Google Drive database file is updated instantly
-          if (result.autoSyncSetting !== false) {
-            syncToDrive(() => {});
+          pendingUpdate: {
+            ...(existing.pendingUpdate || {}),
+            ...updatedFields
           }
-        });
+        };
+        chrome.storage.local.set({ sites });
       }
     }
   });
@@ -861,7 +1401,16 @@ function formatDescriptionAsPoints(desc) {
  */
 function doesDocMatchFormat(content, sites) {
   if (!content || content.trim().length === 0) return true;
-  if (sites.length === 0) return true;
+  
+  if (sites.length === 0) {
+    // If local database is empty but the Google Doc contains saved sites, trigger a rebuild to sync deletion
+    const hasUrls = content.includes('   URL         : ');
+    if (hasUrls) {
+      console.log('[Format Audit] Local database is empty but Google Doc has site records. Triggering sync rebuild...');
+      return false;
+    }
+    return true;
+  }
 
   // Detect old markdown formats
   if (content.includes('### ') || content.includes('**URL**') || content.includes('**Category**') || content.includes('**Description**')) {
@@ -872,6 +1421,15 @@ function doesDocMatchFormat(content, sites) {
   // Detect file extensions or legacy icons in text
   if (content.includes('.txt') || content.includes('.md') || content.includes('📄')) {
     console.log('[Format Audit] Detected legacy extensions or emojis in Google Doc text.');
+    return false;
+  }
+
+  // Check if any URL in the Google Doc does not exist in local active sites (indicating a deletion)
+  const docUrls = [...content.matchAll(/   URL\s*:\s*(https?:\/\/\S+)/g)].map(m => m[1].trim());
+  const siteUrls = new Set(sites.map(s => s.url));
+  const hasDeletedSite = docUrls.some(url => !siteUrls.has(url));
+  if (hasDeletedSite) {
+    console.log('[Format Audit] Detected deleted sites in Google Doc compared to local database. Triggering sync rebuild...');
     return false;
   }
 
@@ -1020,21 +1578,33 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
     sortedSites.forEach((site, i) => {
       const features = extractFeatures(site);
       const category = (site.classification && site.classification.isAI) ? 'AI Platform' : 'Useful Tool';
-      const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
+      const cleanDesc = cleanFieldLockSuffix(site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
       const descPoints = formatDescriptionAsPoints(cleanDesc);
       const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
+      const updatedDate = new Date(site.updatedAt || site.savedAt || site.timestamp).toLocaleString();
 
+      const titleLock = (site.lockedFields && site.lockedFields.title) ? ' *' : ((site.overriddenFields && site.overriddenFields.title) ? ' **' : '');
       const titlePrefix = `${i + 1}. `;
-      const titleLine = `${titlePrefix}${site.title}\n`;
+      const cleanTitle = cleanFieldLockSuffix(site.title);
+      const titleLine = `${titlePrefix}${cleanTitle}${titleLock}\n`;
       
       const urlLine = `   URL         : ${site.url}\n`;
-      const typeLine = `   Type        : ${category}\n`;
-      const descLine = `   Description :\n${descPoints}\n`;
+      
+      const classLock = (site.lockedFields && site.lockedFields.classification) ? ' *' : ((site.overriddenFields && site.overriddenFields.classification) ? ' **' : '');
+      const cleanCategory = cleanFieldLockSuffix(category);
+      const typeLine = `   Type        : ${cleanCategory}${classLock}\n`;
+      
+      const descLock = (site.lockedFields && site.lockedFields.description) ? ' *' : ((site.overriddenFields && site.overriddenFields.description) ? ' **' : '');
+      const descLine = `   Description :${descLock}\n${descPoints}\n`;
+      
       let featuresLine = "";
       if (features.length > 0) {
-        featuresLine = `   Features    : ${features.join(', ')}\n`;
+        const featuresLock = (site.lockedFields && site.lockedFields.keywords) ? ' *' : ((site.overriddenFields && site.overriddenFields.keywords) ? ' **' : '');
+        const cleanFeaturesList = features.map(cleanFieldLockSuffix);
+        featuresLine = `   Features    : ${cleanFeaturesList.join(', ')}${featuresLock}\n`;
       }
-      const savedLine = `   Saved       : ${savedDate}\n\n`;
+      const savedLine = `   Saved       : ${savedDate}\n`;
+      const updatedLine = `   Updated     : ${updatedDate}\n\n`;
 
       // Title Start & End
       const titleStart = currentText.length;
@@ -1095,6 +1665,11 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
       const savedStart = currentText.length;
       const savedEnd = savedStart + savedLine.length;
       currentText += savedLine;
+
+      // 6. Updated Line
+      const updatedStart = currentText.length;
+      const updatedEnd = updatedStart + updatedLine.length;
+      currentText += updatedLine;
 
       const detailsEnd = currentText.length;
 
@@ -1195,14 +1770,26 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
         });
       }
 
-      // Apply Saved Line Italic style (the entire line including value)
+      // Apply Saved Line Italic style
       styleRequests.push({
         updateTextStyle: {
           textStyle: { italic: true },
           fields: 'italic',
           range: {
             startIndex: insertIndex + savedStart,
-            endIndex: insertIndex + savedEnd - 2 // exclude trailing double newline
+            endIndex: insertIndex + savedEnd - 1
+          }
+        }
+      });
+
+      // Apply Updated Line Italic style
+      styleRequests.push({
+        updateTextStyle: {
+          textStyle: { italic: true },
+          fields: 'italic',
+          range: {
+            startIndex: insertIndex + updatedStart,
+            endIndex: insertIndex + updatedEnd - 2
           }
         }
       });
@@ -1315,22 +1902,34 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
   newSites.forEach((site, i) => {
     const features = extractFeatures(site);
     const category = (site.classification && site.classification.isAI) ? 'AI Platform' : 'Useful Tool';
-    const cleanDesc = (site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
+    const cleanDesc = cleanFieldLockSuffix(site.description || '').replace(/\n/g, ' ').trim() || 'No description available.';
     const descPoints = formatDescriptionAsPoints(cleanDesc);
     const savedDate = new Date(site.savedAt || site.timestamp).toLocaleString();
+    const updatedAtDate = new Date(site.updatedAt || site.savedAt || site.timestamp).toLocaleString();
 
     // Line 1: Title line
+    const titleLock = (site.lockedFields && site.lockedFields.title) ? ' *' : ((site.overriddenFields && site.overriddenFields.title) ? ' **' : '');
     const titlePrefix = `${i + 1}. `;
-    const titleLine = `${titlePrefix}${site.title}\n`;
+    const cleanTitle = cleanFieldLockSuffix(site.title);
+    const titleLine = `${titlePrefix}${cleanTitle}${titleLock}\n`;
     
     const urlLine = `   URL         : ${site.url}\n`;
-    const typeLine = `   Type        : ${category}\n`;
-    const descLine = `   Description :\n${descPoints}\n`;
+    
+    const classLock = (site.lockedFields && site.lockedFields.classification) ? ' *' : ((site.overriddenFields && site.overriddenFields.classification) ? ' **' : '');
+    const cleanCategory = cleanFieldLockSuffix(category);
+    const typeLine = `   Type        : ${cleanCategory}${classLock}\n`;
+    
+    const descLock = (site.lockedFields && site.lockedFields.description) ? ' *' : ((site.overriddenFields && site.overriddenFields.description) ? ' **' : '');
+    const descLine = `   Description :${descLock}\n${descPoints}\n`;
+    
     let featuresLine = "";
     if (features.length > 0) {
-      featuresLine = `   Features    : ${features.join(', ')}\n`;
+      const featuresLock = (site.lockedFields && site.lockedFields.keywords) ? ' *' : ((site.overriddenFields && site.overriddenFields.keywords) ? ' **' : '');
+      const cleanFeaturesList = features.map(cleanFieldLockSuffix);
+      featuresLine = `   Features    : ${cleanFeaturesList.join(', ')}${featuresLock}\n`;
     }
-    const savedLine = `   Saved       : ${savedDate}\n\n`;
+    const savedLine = `   Saved       : ${savedDate}\n`;
+    const updatedLine = `   Updated     : ${updatedAtDate}\n\n`;
 
     // Title Start & End
     const titleStart = currentText.length;
@@ -1391,6 +1990,11 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
     const savedStart = currentText.length;
     const savedEnd = savedStart + savedLine.length;
     currentText += savedLine;
+
+    // 6. Updated Line
+    const updatedStart = currentText.length;
+    const updatedEnd = updatedStart + updatedLine.length;
+    currentText += updatedLine;
 
     const detailsEnd = currentText.length;
 
@@ -1491,14 +2095,26 @@ async function appendToDocument(token, docId, sites, skipIds = []) {
       });
     }
 
-    // Apply Saved Line Italic style (the entire line including value)
+    // Apply Saved Line Italic style
     requests.push({
       updateTextStyle: {
         textStyle: { italic: true },
         fields: 'italic',
         range: {
           startIndex: insertIndex + savedStart,
-          endIndex: insertIndex + savedEnd - 2
+          endIndex: insertIndex + savedEnd - 1
+        }
+      }
+    });
+
+    // Apply Updated Line Italic style
+    requests.push({
+      updateTextStyle: {
+        textStyle: { italic: true },
+        fields: 'italic',
+        range: {
+          startIndex: insertIndex + updatedStart,
+          endIndex: insertIndex + updatedEnd - 2
         }
       }
     });

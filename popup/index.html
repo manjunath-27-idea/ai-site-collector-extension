@@ -75,6 +75,7 @@
                     <div class="sites-header">
                         <h2>Collected Sites</h2>
                         <div class="header-actions">
+                            <button id="acceptAllBtn" class="btn btn-warning btn-sm" style="display: none; margin-right: 4px;">✓ Accept All</button>
                             <button id="syncBtn" class="btn btn-secondary btn-sm">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                     <path d="M23 4v6h-6M1 20v-6h6"></path>
@@ -199,7 +200,7 @@
                         <div class="profile-avatar" id="popupProfileAvatar">G</div>
                         <div class="profile-meta">
                             <span id="popupUserEmailDisplay" class="profile-name">Not signed in</span>
-                            <span class="profile-version" id="popupVersionBadge">v3.2.0</span>
+                            <span class="profile-version" id="popupVersionBadge">v3.4.9</span>
                             <div class="profile-actions">
                                 <button id="popupLogoutBtn" class="logout-link">Sign Out</button>
                                 <div class="sidebar-sync-container">
@@ -213,6 +214,29 @@
                                     <span id="popupSyncBadge" class="sync-badge" style="display: none;"></span>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="settings-divider">
+
+                <div class="developer-settings" style="margin-top: var(--spacing-md);">
+                    <h3>Git Project & Update Settings</h3>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: var(--spacing-sm); font-size: 12px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Local Version:</span>
+                            <span id="popupLocalVersion" style="font-family: monospace; font-weight: bold; color: var(--text-primary);">v3.4.9</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Git Version:</span>
+                            <span id="popupGitVersion" style="font-family: monospace; font-weight: bold; color: var(--warning);">Checking...</span>
+                        </div>
+                        <div id="popupGitUpdateAlert" style="display: none; background: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); border-radius: var(--radius-md); padding: 8px; font-size: 11px; margin-top: 4px; color: var(--text-primary);">
+                            <strong>Update Available!</strong> Run <code>git pull</code> in terminal, then click reload.
+                        </div>
+                        <div style="display: flex; gap: 8px; margin-top: 8px;">
+                            <button id="popupCheckUpdateBtn" class="btn btn-secondary btn-sm" style="flex: 1; justify-content: center; height: 32px;">Check</button>
+                            <button id="popupReloadBtn" class="btn btn-primary btn-sm" style="flex: 1; justify-content: center; background: #22c55e; border-color: #22c55e; color: white !important; height: 32px;">Reload</button>
                         </div>
                     </div>
                 </div>

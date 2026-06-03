@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyVtozpq5c8Hz6LDKEFuXXBweO440mT1dbzoGKnMDzVzB4gFFkd8VEMHlblAKg2X3eSGjkCKfG/w/mc86R9Iy2E66i8FEVEwL/NV7yozO36QuC9jn/7DUieRgo9oFMoi9j9g+kNUBlb55i5Q1p0vdXb2S0uUIxtgkWnCWYsbc+BWCaZVa1b3hhab3+Tc0fw7b8X3NtgJtTsBiQl5yMuK67kVePZI1LOjduPAcNWeEQ2Y/MBZCgMPmH5+PwR+oNWOZW7CCjOW07yn572KzCs9UGVKekC1WvLCLjxuFtqf4RMvSjl6N0hv/BIjbx7on9KuPvbm3MLIki2eiZlcQ1mti7QIDAQAB",
   "name": "AI Site Collector",
-  "version": "3.4.3",
+  "version": "3.4.9",
   "description": "Automatically detect and save AI and useful websites to Google Drive with descriptions and features",
   "permissions": [
     "tabs",

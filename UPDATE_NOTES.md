@@ -2,6 +2,30 @@
 
 ---
 
+## v3.4.9 — Granular Suffix Field Locking, Sentence Merging, and Git Reload Panel (2026-06-03)
+
+### What Changed
+
+#### 1. Suffix-Based Field Locking & Asterisks UI
+- **String-Level Locks**: Field-level lock preferences are stored directly within the database text strings:
+  - Locked fields end with ` *` (e.g. `My Title *`).
+  - Overridden fields end with ` **` (e.g. `My Description **`).
+- **Update Bypassing**: Auto-extraction background routines automatically skip fields containing lock suffixes to prevent overwrites.
+- **Dynamic Clean Rendering**: Standard star buttons were replaced with inline asterisks. Field text is cleaned via `cleanFieldLockSuffix` before layout rendering. Unlocked fields show a faint `*` (opacity `0.15`) that brightens on hover, locked fields show gold `*`, and overridden fields show green `**`.
+- **Double Suffix Prevention**: The Google Doc serialization pipeline cleans the database strings first, then formats them with programmatically computed suffixes, avoiding duplicate markers in final document exports.
+
+#### 2. Sentence-Based Description & Feature Merging
+- Descriptions are merged sentence-by-sentence. Unique sentences from incoming web pages are appended case-insensitively while preserving original case.
+- Keyword and features lists are merged via case-insensitive union.
+- Automatically handles database merging of duplicate URLs during startup migration and runtime saves, merging user locks and edits into a single canonical record.
+
+#### 3. Developer Git Updates & Extension Reload settings
+- **Options Dashboard & Popup settings**: Added a dedicated card to manage remote project updates.
+- **Version Comparator**: Fetches the remote GitHub repository `manifest.json` and compares it to the local version, warning the user when updates are available to pull.
+- **Chrome Reload Integration**: Added a "Reload Extension" button utilizing the `chrome.runtime.reload()` API to instantly reload local changes without leaving the Options dashboard.
+
+---
+
 ## v3.2.0 — Google Docs Format Enforcement (2026-05-29)
 
 ### What Changed

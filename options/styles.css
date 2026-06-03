@@ -1338,4 +1338,217 @@ body.light-theme .profile-version {
     font-size: 10px;
 }
 
+/* Proposed Update Panel styling */
+.pending-update-box {
+    margin-top: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: rgba(245, 158, 11, 0.08); /* Subtle orange/amber glow for pending review */
+    border: 1px dashed var(--warning);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    animation: pulseBorder 2s infinite alternate;
+}
+
+@keyframes pulseBorder {
+    0% { border-color: rgba(245, 158, 11, 0.4); }
+    100% { border-color: rgba(245, 158, 11, 0.9); }
+}
+
+.pending-update-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-xs);
+}
+
+.pending-update-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--warning);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.pending-update-diff {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.diff-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    padding-right: 64px; /* Space for accept/reject field buttons */
+}
+
+.diff-item:last-child {
+    border-bottom: none;
+}
+
+.diff-label {
+    font-weight: 600;
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+
+.diff-values {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 6px;
+    border-left: 2px solid rgba(245, 158, 11, 0.3);
+}
+
+.diff-removed {
+    color: #f87171; /* red-400 */
+    text-decoration: line-through;
+    word-break: break-word;
+}
+
+.diff-added {
+    color: #4ade80; /* green-400 */
+    word-break: break-word;
+}
+
+.pending-update-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-sm);
+}
+
+.update-action-btn {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border: none;
+}
+
+.reject-update-btn {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.reject-update-btn:hover {
+    background: #ef4444;
+    color: white;
+    border-color: #ef4444;
+}
+
+.accept-update-btn {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.accept-update-btn:hover {
+    background: #10b981;
+    color: white;
+    border-color: #10b981;
+}
+
+#acceptAllBtn {
+    background: var(--warning);
+    color: #0b0f19 !important;
+    border: none;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+}
+
+#acceptAllBtn:hover {
+    background: #fbbf24;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+/* Field Update Actions */
+.field-update-actions {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 6px;
+}
+
+.field-action-btn {
+    border: none;
+    border-radius: 4px;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+}
+
+.accept-field-btn {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.accept-field-btn:hover {
+    background-color: #22c55e;
+    color: white;
+}
+
+.reject-field-btn {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.reject-field-btn:hover {
+    background-color: #ef4444;
+    color: white;
+}
+
+/* Micro animations for field stars */
+.field-star {
+    transition: transform 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+    opacity: 0.15;
+    cursor: pointer;
+}
+
+.field-star:hover {
+    transform: scale(1.25);
+    opacity: 1;
+}
+
+.field-star.locked,
+.field-star.overridden {
+    opacity: 1;
+}
+
+.field-star.starred {
+    animation: starPulse 0.3s ease-out;
+}
+
+@keyframes starPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}
+
 

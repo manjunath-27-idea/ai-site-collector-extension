@@ -58,7 +58,7 @@
                     <div class="profile-avatar" id="profileAvatar">G</div>
                     <div class="profile-meta">
                         <span id="userEmailDisplay" class="profile-name">Not signed in</span>
-                        <span class="profile-version" id="optionsVersionBadge">v3.2.0</span>
+                        <span class="profile-version" id="optionsVersionBadge">v3.4.9</span>
                         <div class="profile-actions">
                             <button id="sidebarLogoutBtn" class="logout-link">Sign Out</button>
                             <div class="sidebar-sync-container">
@@ -100,6 +100,7 @@
                         </div>
                         
                         <div class="filter-controls">
+                            <button id="acceptAllBtn" class="btn btn-warning" style="display: none; margin-right: 8px;">✓ Accept All Updates</button>
                             <button class="filter-btn active" data-filter="all">All</button>
                             <button class="filter-btn" data-filter="ai">AI Sites</button>
                             <button class="filter-btn" data-filter="useful">Useful Sites</button>
@@ -249,6 +250,39 @@
                                         <strong>Dark Theme Mode</strong>
                                         <span>Toggle between dark interface and light clean views</span>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Developer & Update Tools Card -->
+                        <div class="dashboard-card" id="developerToolsCard">
+                            <h3>Git Project & Update settings</h3>
+                            <p class="settings-help">Manage project versions and update states directly from the remote Git repository.</p>
+                            
+                            <div class="developer-settings-box" style="margin-top: var(--spacing-sm); display: flex; flex-direction: column; gap: var(--spacing-sm);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
+                                    <span style="font-weight: 600; color: var(--text-secondary);">Local Version</span>
+                                    <span id="localVersionDisplay" style="font-family: monospace; color: var(--text-primary);">v3.4.9</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
+                                    <span style="font-weight: 600; color: var(--text-secondary);">Remote Git Version</span>
+                                    <span id="gitVersionDisplay" style="font-family: monospace; color: var(--warning);">Checking...</span>
+                                </div>
+                                <div id="gitUpdateAlert" class="promo-box" style="display: none; background: rgba(245, 158, 11, 0.1); border: 1px solid var(--warning); border-radius: var(--radius-md); padding: var(--spacing-sm); font-size: 12px; color: var(--text-primary);">
+                                    <strong>Update Available!</strong> Please run <code>git pull</code> in your project terminal to fetch the latest code, then click the Reload button below.
+                                </div>
+                                <div style="display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-xs);">
+                                    <button id="checkGitUpdateBtn" class="btn btn-secondary" style="flex: 1; justify-content: center;">
+                                        Check for Updates
+                                    </button>
+                                    <button id="reloadExtensionBtn" class="btn btn-primary" style="flex: 1; justify-content: center; background: #22c55e; border-color: #22c55e; color: white !important;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 14px; height: 14px; margin-right: 4px;">
+                                            <path d="M23 4v6h-6"></path>
+                                            <path d="M1 20v-6h6"></path>
+                                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                        </svg>
+                                        Reload Extension
+                                    </button>
                                 </div>
                             </div>
                         </div>

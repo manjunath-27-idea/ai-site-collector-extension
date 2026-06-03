@@ -147,6 +147,28 @@ All UI windows (popup + options dashboard) stay in sync via `chrome.storage.onCh
 
 ---
 
+## 🔒 Granular Suffix-Based Field Locking
+
+Users can lock or override individual fields (Title, Description, Classification Badge, and Features) instead of locking the entire card:
+- **String-Level DB Preservation**: Locked fields have a suffix ` *` appended to their string value in storage. Overridden fields have ` **` appended.
+- **Auto-Update Bypassing**: The background extraction script scans stored strings for `*` or `**` endings and skips auto-updating those fields.
+- **Sentence-Based Description Merging**: When a non-locked description receives an update, the new description is merged sentence-by-sentence with the existing one (using a case-insensitive union that preserves original casing), rather than overwriting it completely.
+- **Interactive Inline UI**: Clickable asterisk indicators display next to field values in the popup and dashboard cards:
+  - Gold `*` — Locked against updates.
+  - Green `**` — Overridden/modified by user.
+  - Faint grey `*` (hover to focus) — Unlocked.
+- **Clean Google Doc Formatting**: The Google Doc serialization pipeline strips suffixes before formatting, programmatically printing single lock markers (`*` or `**`) to avoid duplication.
+
+---
+
+## 🛠️ Developer Git Updates & Chrome Reload
+
+Manage project development updates directly from the extension settings:
+- **Version Checker**: Automatically checks the project's GitHub repository `manifest.json` against the local extension version on settings load, alerting the user to run `git pull` if an update is available.
+- **One-Click Reload**: Built-in **Reload Extension** button invokes the `chrome.runtime.reload()` API to instantly refresh all extension processes, background workers, and content scripts with the latest local changes.
+
+---
+
 ## 🎨 UI Design
 
 - **Dark theme** by default — background `#0f172a`, gradient accents indigo→purple

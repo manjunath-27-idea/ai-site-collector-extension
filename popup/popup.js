@@ -3,6 +3,112 @@
  * Single document mode: All sites appended to one selected document
  */
 
+/**
+ * Suffix-based field locking helper functions
+ */
+function isFieldLockedOrOverridden(val) {
+  if (!val) return false;
+  if (Array.isArray(val)) {
+    return val.some(item => typeof item === 'string' && (item.trim().endsWith('*') || item.trim().endsWith('**')));
+  }
+  if (typeof val === 'object') {
+    return isFieldLockedOrOverridden(val.label);
+  }
+  const str = String(val).trim();
+  return str.endsWith('*') || str.endsWith('**');
+}
+
+function isFieldLocked(val) {
+  if (!val) return false;
+  if (Array.isArray(val)) {
+    return val.some(item => typeof item === 'string' && item.trim().endsWith('*') && !item.trim().endsWith('**'));
+  }
+  if (typeof val === 'object') {
+    return isFieldLocked(val.label);
+  }
+  const str = String(val).trim();
+  return str.endsWith('*') && !str.endsWith('**');
+}
+
+function isFieldOverridden(val) {
+  if (!val) return false;
+  if (Array.isArray(val)) {
+    return val.some(item => typeof item === 'string' && item.trim().endsWith('**'));
+  }
+  if (typeof val === 'object') {
+    return isFieldOverridden(val.label);
+  }
+  const str = String(val).trim();
+  return str.endsWith('**');
+}
+
+function cleanFieldLockSuffix(val) {
+  if (!val) return val;
+  if (Array.isArray(val)) {
+    return val.map(cleanFieldLockSuffix).filter(item => item !== '*' && item !== '**' && item !== '');
+  }
+  if (typeof val === 'object') {
+    const cleaned = { ...val };
+    if (cleaned.label) cleaned.label = cleanFieldLockSuffix(cleaned.label);
+    if (cleaned.tags) cleaned.tags = cleaned.tags.map(cleanFieldLockSuffix);
+    if (cleaned.reasons) cleaned.reasons = cleaned.reasons.map(cleanFieldLockSuffix);
+    return cleaned;
+  }
+  return String(val).replace(/\s*\*\*?$/, '');
+}
+
+function applyFieldLockSuffix(val, suffix) {
+  if (!val) return val;
+  if (Array.isArray(val)) {
+    const cleaned = cleanFieldLockSuffix(val);
+    if (suffix && cleaned.length > 0) {
+      cleaned[cleaned.length - 1] = cleaned[cleaned.length - 1] + suffix;
+    }
+    return cleaned;
+  }
+  if (typeof val === 'object') {
+    const cleaned = { ...val };
+    if (cleaned.label) {
+      cleaned.label = applyFieldLockSuffix(cleaned.label, suffix);
+    }
+    return cleaned;
+  }
+  const cleaned = String(val).replace(/\s*\*\*?$/, '');
+  return cleaned + suffix;
+}
+
+function syncFieldLocksAndTexts(site) {
+  if (!site) return site;
+  if (!site.lockedFields) site.lockedFields = {};
+  if (!site.overriddenFields) site.overriddenFields = {};
+
+  const fieldsToCheck = ['title', 'description', 'keywords', 'classification'];
+  fieldsToCheck.forEach(field => {
+    const isLocked = site.lockedFields[field];
+    const isOverridden = site.overriddenFields[field];
+    
+    let suffix = '';
+    if (isLocked) suffix = ' *';
+    else if (isOverridden) suffix = ' **';
+    
+    if (field === 'classification') {
+      if (site.classification && site.classification.label) {
+        site.classification.label = cleanFieldLockSuffix(site.classification.label) + suffix;
+      }
+    } else if (field === 'keywords') {
+      if (site.keywords && Array.isArray(site.keywords) && site.keywords.length > 0) {
+        site.keywords = cleanFieldLockSuffix(site.keywords);
+        if (suffix) {
+          site.keywords[site.keywords.length - 1] = site.keywords[site.keywords.length - 1] + suffix;
+        }
+      }
+    } else if (site[field] !== undefined) {
+      site[field] = cleanFieldLockSuffix(site[field]) + suffix;
+    }
+  });
+  return site;
+}
+
 let sites = [];
 let currentFilter = 'all';
 let allDriveFiles = [];
@@ -46,6 +152,13 @@ const addKeywordBtn = document.getElementById('addKeywordBtn');
 const aiKeywordsTags = document.getElementById('aiKeywordsTags');
 const usefulKeywordsTags = document.getElementById('usefulKeywordsTags');
 
+// Developer & Git Update Elements
+const popupLocalVersion = document.getElementById('popupLocalVersion');
+const popupGitVersion = document.getElementById('popupGitVersion');
+const popupGitUpdateAlert = document.getElementById('popupGitUpdateAlert');
+const popupCheckUpdateBtn = document.getElementById('popupCheckUpdateBtn');
+const popupReloadBtn = document.getElementById('popupReloadBtn');
+
 // Initialize
 function init() {
     selfHealSitesDescription();
@@ -56,6 +169,7 @@ function init() {
     loadSettings();
     loadCustomKeywords();
     updateSyncBadge();
+    initDeveloperTools();
 }
 
 /**
@@ -100,6 +214,8 @@ function setupEventListeners() {
     syncBtn.addEventListener('click', syncToDrive);
     clearBtn.addEventListener('click', clearAllSites);
     settingsBtn.addEventListener('click', openSettings);
+    const acceptAllBtn = document.getElementById('acceptAllBtn');
+    if (acceptAllBtn) acceptAllBtn.addEventListener('click', acceptAllUpdates);
     dashboardBtn.addEventListener('click', () => {
         chrome.runtime.openOptionsPage();
     });
@@ -108,6 +224,20 @@ function setupEventListeners() {
     popupSyncBtn.addEventListener('click', syncToDrive);
     popupSignInBtn.addEventListener('click', authenticate);
     if (docSearch) docSearch.addEventListener('input', filterDocuments);
+
+    // Developer & Update listeners
+    if (popupCheckUpdateBtn) {
+        popupCheckUpdateBtn.addEventListener('click', () => checkGitUpdates(true));
+    }
+    if (popupReloadBtn) {
+        popupReloadBtn.addEventListener('click', () => {
+            if (chrome.runtime.reload) {
+                chrome.runtime.reload();
+            } else {
+                alert("Reload API only available in extension runtime.");
+            }
+        });
+    }
 
     // Settings toggles listeners
     autoSyncCheckbox.addEventListener('change', (e) => {
@@ -380,6 +510,13 @@ function renderSites() {
     // Sort: newest first
     filteredSites = [...filteredSites].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
 
+    // Update "Accept All" button visibility
+    const acceptAllBtn = document.getElementById('acceptAllBtn');
+    if (acceptAllBtn) {
+        const hasPending = sites.some(s => s.pendingUpdate);
+        acceptAllBtn.style.display = hasPending ? 'inline-block' : 'none';
+    }
+
     if (filteredSites.length === 0) {
         emptyState.style.display = 'flex';
         return;
@@ -457,6 +594,43 @@ function extractFeatures(site) {
 }
 
 /**
+ * Helper to generate star HTML next to a field (using * / ** asterisks instead of star icons)
+ */
+function getFieldStarHtml(site, field, tooltip) {
+    let checkVal = site[field];
+    if (field === 'classification') {
+        checkVal = site.classification ? site.classification.label : null;
+    }
+    const isLocked = (site.lockedFields && site.lockedFields[field]) || isFieldLocked(checkVal);
+    const isOverridden = (site.overriddenFields && site.overriddenFields[field]) || isFieldOverridden(checkVal);
+    
+    let labelChar = '*';
+    let labelColor = '#9ca3af'; // default grey
+    let btnTitle = `Lock ${tooltip} to ignore updates`;
+    let btnClass = 'field-star unlocked';
+    
+    if (isLocked) {
+        labelChar = '*';
+        labelColor = '#fbbf24'; // gold/yellow
+        btnTitle = `Unlock ${tooltip} to allow updates`;
+        btnClass = 'field-star locked';
+    } else if (isOverridden) {
+        labelChar = '**';
+        labelColor = '#10b981'; // green for overridden
+        btnTitle = `${tooltip} is overridden. Click to lock.`;
+        btnClass = 'field-star overridden';
+    }
+    
+    return `
+        <span class="${btnClass}" data-id="${site.id}" data-field="${field}" 
+              style="cursor: pointer; font-size: 13px; font-weight: bold; color: ${labelColor}; padding: 0 3px; display: inline-flex; align-items: center; vertical-align: middle;" 
+              title="${btnTitle}">
+            ${labelChar}
+        </span>
+    `;
+}
+
+/**
  * Create site element
  */
 function createSiteElement(site) {
@@ -472,15 +646,151 @@ function createSiteElement(site) {
     const savedDate = new Date(site.savedAt || site.timestamp || new Date()).toLocaleDateString();
     const features = extractFeatures(site);
 
+    let titleDiffHtml = '';
+    if (site.pendingUpdate && site.pendingUpdate.title && site.pendingUpdate.title !== site.title) {
+        titleDiffHtml = `
+            <div class="diff-item">
+                <span class="diff-label">Title:</span>
+                <div class="diff-values">
+                    <span class="diff-removed">${escapeHtml(cleanFieldLockSuffix(site.title))}</span>
+                    <span class="diff-added">${escapeHtml(cleanFieldLockSuffix(site.pendingUpdate.title))}</span>
+                </div>
+                <div class="field-update-actions">
+                    <button class="field-action-btn accept-field-btn" data-id="${site.id}" data-field="title" title="Accept Title Update">✓</button>
+                    <button class="field-action-btn reject-field-btn" data-id="${site.id}" data-field="title" title="Keep Original & Lock Title">✗</button>
+                </div>
+            </div>
+        `;
+    }
+
+    let descDiffHtml = '';
+    if (site.pendingUpdate && site.pendingUpdate.description && site.pendingUpdate.description !== site.description) {
+        descDiffHtml = `
+            <div class="diff-item">
+                <span class="diff-label">Description:</span>
+                <div class="diff-values">
+                    <span class="diff-removed">${escapeHtml(cleanFieldLockSuffix(site.description || 'None'))}</span>
+                    <span class="diff-added">${escapeHtml(cleanFieldLockSuffix(site.pendingUpdate.description))}</span>
+                </div>
+                <div class="field-update-actions">
+                    <button class="field-action-btn accept-field-btn" data-id="${site.id}" data-field="description" title="Accept Description Update">✓</button>
+                    <button class="field-action-btn reject-field-btn" data-id="${site.id}" data-field="description" title="Keep Original & Lock Description">✗</button>
+                </div>
+            </div>
+        `;
+    }
+
+    let featuresDiffHtml = '';
+    if (site.pendingUpdate && site.pendingUpdate.keywords) {
+        const currentFeatures = extractFeatures(site).map(cleanFieldLockSuffix);
+        const proposedFeatures = extractFeatures({ ...site, ...site.pendingUpdate }).map(cleanFieldLockSuffix);
+        if (JSON.stringify(currentFeatures) !== JSON.stringify(proposedFeatures)) {
+            featuresDiffHtml = `
+                <div class="diff-item">
+                    <span class="diff-label">Features:</span>
+                    <div class="diff-values">
+                        <span class="diff-removed">${escapeHtml(currentFeatures.join(', ') || 'None')}</span>
+                        <span class="diff-added">${escapeHtml(proposedFeatures.join(', '))}</span>
+                    </div>
+                    <div class="field-update-actions">
+                        <button class="field-action-btn accept-field-btn" data-id="${site.id}" data-field="keywords" title="Accept Features Update">✓</button>
+                        <button class="field-action-btn reject-field-btn" data-id="${site.id}" data-field="keywords" title="Keep Original & Lock Features">✗</button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    let typeDiffHtml = '';
+    if (site.pendingUpdate && site.pendingUpdate.classification) {
+        const wasAI = site.classification && site.classification.isAI;
+        const nowAI = site.pendingUpdate.classification.isAI;
+        const oldLabel = (site.classification && site.classification.label) || (wasAI ? 'AI Tool' : 'Useful Tool');
+        const newLabel = site.pendingUpdate.classification.label || (nowAI ? 'AI Tool' : 'Useful Tool');
+        const cleanOldLabel = cleanFieldLockSuffix(oldLabel);
+        const cleanNewLabel = cleanFieldLockSuffix(newLabel);
+        if (wasAI !== nowAI || cleanOldLabel !== cleanNewLabel) {
+            typeDiffHtml = `
+                <div class="diff-item">
+                    <span class="diff-label">Classification:</span>
+                    <div class="diff-values">
+                        <span class="diff-removed">${escapeHtml(cleanOldLabel)}</span>
+                        <span class="diff-added">${escapeHtml(cleanNewLabel)}</span>
+                    </div>
+                    <div class="field-update-actions">
+                        <button class="field-action-btn accept-field-btn" data-id="${site.id}" data-field="classification" title="Accept Classification Update">✓</button>
+                        <button class="field-action-btn reject-field-btn" data-id="${site.id}" data-field="classification" title="Keep Original & Lock Classification">✗</button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    let deleteDiffHtml = '';
+    if (site.pendingUpdate && site.pendingUpdate.delete === true) {
+        deleteDiffHtml = `
+            <div class="diff-item deletion-diff">
+                <span class="diff-label">Action:</span>
+                <div class="diff-values" style="border-left-color: #ef4444;">
+                    <span class="diff-removed">❌ Remove entire site record (${escapeHtml(site.pendingUpdate.reason || 'SSO/System Page conflict')})</span>
+                </div>
+            </div>
+        `;
+    }
+
+    let pendingBoxHtml = '';
+    if (site.pendingUpdate && (titleDiffHtml || descDiffHtml || featuresDiffHtml || typeDiffHtml || deleteDiffHtml)) {
+        const isDeletion = site.pendingUpdate.delete === true;
+        const boxClass = isDeletion ? 'pending-update-box deletion-warning' : 'pending-update-box';
+        const badgeText = isDeletion ? '⚠️ Review Proposed Deletion' : '⚠️ Review Proposed Update';
+        const overwriteTitle = isDeletion ? '✓ Confirm Delete' : '✓ Overwrite';
+        const overwriteText = isDeletion ? '✓ Confirm Delete' : '✓ Overwrite';
+        pendingBoxHtml = `
+            <div class="${boxClass}">
+                <div class="pending-update-header">
+                    <span class="pending-update-badge" style="${isDeletion ? 'color: #ef4444;' : ''}">${badgeText}</span>
+                </div>
+                <div class="pending-update-diff">
+                    ${titleDiffHtml}
+                    ${typeDiffHtml}
+                    ${descDiffHtml}
+                    ${featuresDiffHtml}
+                    ${deleteDiffHtml}
+                </div>
+                <div class="pending-update-actions">
+                    <button class="update-action-btn reject-update-btn" data-id="${site.id}" title="Keep Original">✗ Keep Original</button>
+                    <button class="update-action-btn accept-update-btn" data-id="${site.id}" title="${overwriteTitle}">${overwriteText}</button>
+                </div>
+            </div>
+        `;
+    }
+
     div.innerHTML = `
         <div class="site-header">
-            <div class="site-title">${escapeHtml(site.title)}</div>
-            <span class="site-badge ${badgeClass}">${escapeHtml(label)}</span>
+            <div class="site-title" style="display: flex; align-items: center; gap: 6px;">
+                ${escapeHtml(cleanFieldLockSuffix(site.title))}
+                ${getFieldStarHtml(site, 'title', 'title')}
+            </div>
+            <div class="site-badge-box" style="display: flex; align-items: center; gap: 4px;">
+                <span class="site-badge ${badgeClass}">${escapeHtml(cleanFieldLockSuffix(label))}</span>
+                ${getFieldStarHtml(site, 'classification', 'classification')}
+            </div>
+        </div>
+        <div class="site-description-container" style="display: flex; align-items: flex-start; gap: 4px; margin-bottom: var(--spacing-xs);">
+            <div class="site-description" style="margin-bottom: 0; flex: 1;">${escapeHtml(cleanFieldLockSuffix(site.description || 'No description available'))}</div>
+            ${getFieldStarHtml(site, 'description', 'description')}
         </div>
         <div class="site-url">${escapeHtml(site.url)}</div>
-        ${features.length > 0 ? `<div class="site-features">
-            <strong>Features:</strong> ${features.map(f => `<span class="feature-tag">${escapeHtml(f)}</span>`).join('')}
-        </div>` : ''}
+        
+        <div class="site-features-container" style="display: flex; align-items: center; gap: 4px; margin-bottom: var(--spacing-sm); flex-wrap: wrap;">
+            <div class="site-features" style="margin-bottom: 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+                <strong>Features:</strong> ${features.length > 0 ? features.map(cleanFieldLockSuffix).map(f => `<span class="feature-tag" style="margin: 0 2px;">${escapeHtml(f)}</span>`).join('') : '<span style="color: #9ca3af; font-size: 11px; font-style: italic;">No features</span>'}
+            </div>
+            ${getFieldStarHtml(site, 'keywords', 'features')}
+        </div>
+
+        ${pendingBoxHtml}
+
         <div class="site-footer">
             <span>${savedDate}</span>
             <div class="confidence">
@@ -495,6 +805,49 @@ function createSiteElement(site) {
     div.addEventListener('click', () => {
         chrome.tabs.create({ url: site.url });
     });
+
+    // Field-level star toggle listeners
+    div.querySelectorAll('.field-star').forEach(starBtn => {
+        starBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const field = starBtn.dataset.field;
+            toggleFieldStar(site.id, field);
+        });
+    });
+
+    // Field-level accept action listeners
+    div.querySelectorAll('.accept-field-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const field = btn.dataset.field;
+            acceptFieldUpdate(site.id, field);
+        });
+    });
+
+    // Field-level reject action listeners
+    div.querySelectorAll('.reject-field-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const field = btn.dataset.field;
+            rejectFieldUpdate(site.id, field);
+        });
+    });
+
+    const acceptBtn = div.querySelector('.accept-update-btn');
+    if (acceptBtn) {
+        acceptBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            acceptPendingUpdate(site.id);
+        });
+    }
+
+    const rejectBtn = div.querySelector('.reject-update-btn');
+    if (rejectBtn) {
+        rejectBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            rejectPendingUpdate(site.id);
+        });
+    }
 
     return div;
 }
@@ -782,3 +1135,362 @@ function updateSyncBadge() {
         }
     });
 }
+
+/**
+ * Accept the pending update for a site
+ */
+function acceptPendingUpdate(siteId) {
+    chrome.storage.local.get(['sites', 'autoSyncSetting'], (result) => {
+        const list = result.sites || [];
+        const index = list.findIndex(s => s.id === siteId);
+        if (index !== -1) {
+            const site = list[index];
+            if (site.pendingUpdate) {
+                if (site.pendingUpdate.delete === true) {
+                    list.splice(index, 1);
+                    chrome.storage.local.set({ sites: list }, () => {
+                        loadSites();
+                        updateSyncStatus('Site deleted from collection');
+                        if (result.autoSyncSetting !== false) {
+                            syncToDrive();
+                        }
+                    });
+                } else {
+                    const updatedSite = {
+                        ...site,
+                        ...site.pendingUpdate,
+                        updatedAt: new Date().toISOString(),
+                        synced: false
+                    };
+                    if (!updatedSite.overriddenFields) {
+                        updatedSite.overriddenFields = {};
+                    }
+                    if (!updatedSite.lockedFields) {
+                        updatedSite.lockedFields = {};
+                    }
+                    for (const field in site.pendingUpdate) {
+                        if (field !== 'delete' && field !== 'reason') {
+                            updatedSite.overriddenFields[field] = true;
+                            updatedSite.lockedFields[field] = false;
+                        }
+                    }
+                    delete updatedSite.pendingUpdate;
+                    syncFieldLocksAndTexts(updatedSite);
+                    list[index] = updatedSite;
+                    chrome.storage.local.set({ sites: list }, () => {
+                        loadSites();
+                        updateSyncStatus('Pending update accepted');
+                        if (result.autoSyncSetting !== false) {
+                            syncToDrive();
+                        }
+                    });
+                }
+            }
+        }
+    });
+}
+
+/**
+ * Reject the pending update for a site (rejects all remaining pending fields and locks them)
+ */
+function rejectPendingUpdate(siteId) {
+    chrome.storage.local.get(['sites', 'autoSyncSetting'], (result) => {
+        const list = result.sites || [];
+        const index = list.findIndex(s => s.id === siteId);
+        if (index !== -1) {
+            const site = list[index];
+            if (site.pendingUpdate) {
+                const updatedSite = { 
+                    ...site,
+                    synced: false
+                };
+                if (!updatedSite.lockedFields) {
+                    updatedSite.lockedFields = {};
+                }
+                if (!updatedSite.overriddenFields) {
+                    updatedSite.overriddenFields = {};
+                }
+                for (const field in site.pendingUpdate) {
+                    if (field !== 'delete' && field !== 'reason') {
+                        updatedSite.lockedFields[field] = true;
+                        updatedSite.overriddenFields[field] = false;
+                    }
+                }
+                delete updatedSite.pendingUpdate;
+                syncFieldLocksAndTexts(updatedSite);
+                list[index] = updatedSite;
+                chrome.storage.local.set({ sites: list }, () => {
+                    loadSites();
+                    updateSyncStatus('Original kept and fields locked to ignore updates');
+                    if (result.autoSyncSetting !== false) {
+                        syncToDrive();
+                    }
+                });
+            }
+        }
+    });
+}
+
+/**
+ * Toggle the lock status of a specific field on a site
+ */
+function toggleFieldStar(siteId, field) {
+    chrome.storage.local.get(['sites', 'autoSyncSetting'], (result) => {
+        const list = result.sites || [];
+        const index = list.findIndex(s => s.id === siteId);
+        if (index !== -1) {
+            const site = list[index];
+            if (!site.lockedFields) site.lockedFields = {};
+            if (!site.overriddenFields) site.overriddenFields = {};
+            
+            const isLocked = site.lockedFields[field];
+            const isOverridden = site.overriddenFields[field];
+            
+            if (isLocked) {
+                site.lockedFields[field] = false;
+                site.overriddenFields[field] = false;
+            } else if (isOverridden) {
+                site.lockedFields[field] = true;
+                site.overriddenFields[field] = false;
+            } else {
+                site.lockedFields[field] = true;
+                site.overriddenFields[field] = false;
+            }
+            
+            syncFieldLocksAndTexts(site);
+            site.synced = false; // mark unsynced to update Google Doc star indicator
+            chrome.storage.local.set({ sites: list }, () => {
+                loadSites();
+                const statusStr = site.lockedFields[field] ? `Field '${field}' locked against updates` : `Field '${field}' unlocked`;
+                updateSyncStatus(statusStr);
+                if (result.autoSyncSetting !== false) {
+                    syncToDrive();
+                }
+            });
+        }
+    });
+}
+
+/**
+ * Accept proposed update for a single field
+ */
+function acceptFieldUpdate(siteId, field) {
+    chrome.storage.local.get(['sites', 'autoSyncSetting'], (result) => {
+        const list = result.sites || [];
+        const index = list.findIndex(s => s.id === siteId);
+        if (index !== -1) {
+            const site = list[index];
+            if (site.pendingUpdate && site.pendingUpdate[field] !== undefined) {
+                if (field === 'classification') {
+                    site.classification = site.pendingUpdate.classification;
+                } else if (field === 'keywords') {
+                    site.keywords = site.pendingUpdate.keywords;
+                } else {
+                    site[field] = site.pendingUpdate[field];
+                }
+                
+                if (!site.overriddenFields) site.overriddenFields = {};
+                if (!site.lockedFields) site.lockedFields = {};
+                site.overriddenFields[field] = true;
+                site.lockedFields[field] = false;
+                
+                delete site.pendingUpdate[field];
+                const remainingFields = Object.keys(site.pendingUpdate).filter(k => k !== 'reason');
+                if (remainingFields.length === 0) {
+                    delete site.pendingUpdate;
+                }
+                
+                syncFieldLocksAndTexts(site);
+                site.synced = false;
+                site.updatedAt = new Date().toISOString();
+                
+                chrome.storage.local.set({ sites: list }, () => {
+                    loadSites();
+                    updateSyncStatus(`Accepted update for ${field}`);
+                    if (result.autoSyncSetting !== false) {
+                        syncToDrive();
+                    }
+                });
+            }
+        }
+    });
+}
+
+/**
+ * Reject proposed update for a single field and lock it
+ */
+function rejectFieldUpdate(siteId, field) {
+    chrome.storage.local.get(['sites', 'autoSyncSetting'], (result) => {
+        const list = result.sites || [];
+        const index = list.findIndex(s => s.id === siteId);
+        if (index !== -1) {
+            const site = list[index];
+            if (site.pendingUpdate && site.pendingUpdate[field] !== undefined) {
+                if (!site.lockedFields) site.lockedFields = {};
+                if (!site.overriddenFields) site.overriddenFields = {};
+                site.lockedFields[field] = true;
+                site.overriddenFields[field] = false;
+                
+                delete site.pendingUpdate[field];
+                const remainingFields = Object.keys(site.pendingUpdate).filter(k => k !== 'reason');
+                if (remainingFields.length === 0) {
+                    delete site.pendingUpdate;
+                }
+                
+                syncFieldLocksAndTexts(site);
+                site.synced = false;
+                site.updatedAt = new Date().toISOString();
+                
+                chrome.storage.local.set({ sites: list }, () => {
+                    loadSites();
+                    updateSyncStatus(`Rejected update and locked ${field}`);
+                    if (result.autoSyncSetting !== false) {
+                        syncToDrive();
+                    }
+                });
+            }
+        }
+    });
+}
+
+/**
+ * Accept all pending updates in the entire collection
+ */
+function acceptAllUpdates() {
+    chrome.storage.local.get(['sites', 'autoSyncSetting'], (result) => {
+        const list = result.sites || [];
+        let updatedCount = 0;
+        const newList = [];
+        list.forEach(site => {
+            if (site.pendingUpdate) {
+                updatedCount++;
+                if (site.pendingUpdate.delete === true) {
+                    return; // skip adding to newList (deletes the site)
+                }
+                const updatedSite = {
+                    ...site,
+                    ...site.pendingUpdate,
+                    updatedAt: new Date().toISOString(),
+                    synced: false
+                };
+                if (!updatedSite.overriddenFields) {
+                    updatedSite.overriddenFields = {};
+                }
+                if (!updatedSite.lockedFields) {
+                    updatedSite.lockedFields = {};
+                }
+                for (const field in site.pendingUpdate) {
+                    if (field !== 'delete' && field !== 'reason') {
+                        updatedSite.overriddenFields[field] = true;
+                        updatedSite.lockedFields[field] = false;
+                    }
+                }
+                delete updatedSite.pendingUpdate;
+                syncFieldLocksAndTexts(updatedSite);
+                newList.push(updatedSite);
+            } else {
+                newList.push(site);
+            }
+        });
+        if (updatedCount > 0) {
+            chrome.storage.local.set({ sites: newList }, () => {
+                loadSites();
+                updateSyncStatus(`Accepted all ${updatedCount} pending updates`);
+                if (result.autoSyncSetting !== false) {
+                    syncToDrive();
+                }
+            });
+        }
+    });
+}
+
+/**
+ * Initialize developer / git settings views
+ */
+function initDeveloperTools() {
+    if (!popupLocalVersion) return;
+    
+    // Set local version display
+    const manifest = chrome.runtime.getManifest();
+    popupLocalVersion.textContent = 'v' + manifest.version;
+    
+    const popupVersionBadge = document.getElementById('popupVersionBadge');
+    if (popupVersionBadge) {
+        popupVersionBadge.textContent = 'v' + manifest.version;
+    }
+    
+    // Silent check on load
+    checkGitUpdates(false);
+}
+
+/**
+ * Compare semantic versions (e.g. "3.4.9" vs "3.4.10")
+ * Returns positive if v2 > v1, negative if v1 > v2, 0 if equal
+ */
+function compareVersions(v1, v2) {
+    const parts1 = v1.replace(/^v/, '').split('.').map(Number);
+    const parts2 = v2.replace(/^v/, '').split('.').map(Number);
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+        const p1 = parts1[i] || 0;
+        const p2 = parts2[i] || 0;
+        if (p1 !== p2) return p2 - p1;
+    }
+    return 0;
+}
+
+/**
+ * Fetch and check the GitHub project repository manifest for version updates
+ */
+function checkGitUpdates(showAlerts = false) {
+    if (!popupGitVersion) return;
+    
+    popupGitVersion.textContent = 'Checking...';
+    popupGitVersion.style.color = 'var(--warning)';
+    if (popupGitUpdateAlert) popupGitUpdateAlert.style.display = 'none';
+    
+    const rawUrl = 'https://raw.githubusercontent.com/manjunath-27-idea/ai-site-collector-extension/main/manifest.json';
+    
+    fetch(rawUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (!data || !data.version) {
+                throw new Error("Invalid manifest file in git repository");
+            }
+            
+            const localVer = chrome.runtime.getManifest().version;
+            const gitVer = data.version;
+            
+            const updateComparison = compareVersions(localVer, gitVer);
+            if (updateComparison > 0) {
+                // Git version is newer
+                popupGitVersion.textContent = 'v' + gitVer + ' (Update Available)';
+                popupGitVersion.style.color = '#ef4444'; // Red
+                if (popupGitUpdateAlert) popupGitUpdateAlert.style.display = 'block';
+                if (showAlerts) {
+                    alert(`Update Available!\n\nLocal version: v${localVer}\nRemote version: v${gitVer}\n\nPlease run 'git pull' in your terminal, then click 'Reload'.`);
+                }
+            } else {
+                // Git version is equal or older
+                popupGitVersion.textContent = 'v' + gitVer + ' (Up to date)';
+                popupGitVersion.style.color = '#10b981'; // Green
+                if (popupGitUpdateAlert) popupGitUpdateAlert.style.display = 'none';
+                if (showAlerts) {
+                    alert(`Up to Date!\n\nYour extension is running the latest version: v${localVer}`);
+                }
+            }
+        })
+        .catch(err => {
+            console.error("Failed to check Git project updates:", err);
+            popupGitVersion.textContent = 'Error checking remote version';
+            popupGitVersion.style.color = '#ef4444';
+            if (showAlerts) {
+                alert("Failed to check updates. Please verify your internet connection or repository access.");
+            }
+        });
+}
+
