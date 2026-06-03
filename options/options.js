@@ -1542,22 +1542,20 @@ function checkGitUpdates(showAlerts = false) {
     gitVersionDisplay.style.color = 'var(--warning)';
     if (gitUpdateAlert) gitUpdateAlert.style.display = 'none';
     
-    const rawUrl = 'https://raw.githubusercontent.com/manjunath-27-idea/ai-site-collector-extension/main/manifest.json';
-    
-    fetch(rawUrl)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+    chrome.runtime.sendMessage({ action: 'checkGitUpdates' }, (response) => {
+        if (chrome.runtime.lastError) {
+            console.error("Runtime error checking updates:", chrome.runtime.lastError);
+            gitVersionDisplay.textContent = 'Error checking remote version';
+            gitVersionDisplay.style.color = '#ef4444';
+            if (showAlerts) {
+                alert("Failed to check updates. Please verify your connection.");
             }
-            return response.json();
-        })
-        .then(data => {
-            if (!data || !data.version) {
-                throw new Error("Invalid manifest file in git repository");
-            }
-            
+            return;
+        }
+        
+        if (response && response.success) {
             const localVer = chrome.runtime.getManifest().version;
-            const gitVer = data.version;
+            const gitVer = response.version;
             
             const updateComparison = compareVersions(localVer, gitVer);
             if (updateComparison > 0) {
@@ -1577,14 +1575,14 @@ function checkGitUpdates(showAlerts = false) {
                     alert(`Up to Date!\n\nYour extension is running the latest version: v${localVer}`);
                 }
             }
-        })
-        .catch(err => {
-            console.error("Failed to check Git project updates:", err);
+        } else {
+            console.error("Background update check failed:", response ? response.error : 'Unknown error');
             gitVersionDisplay.textContent = 'Error checking remote version';
             gitVersionDisplay.style.color = '#ef4444';
             if (showAlerts) {
                 alert("Failed to check updates. Please verify your internet connection or repository access.");
             }
-        });
+        }
+    });
 }
 

@@ -652,6 +652,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     });
     return true;
+  } else if (request.action === 'checkGitUpdates') {
+    const rawUrl = 'https://raw.githubusercontent.com/manjunath-27-idea/ai-site-collector-extension/main/manifest.json';
+    fetch(rawUrl)
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return response.json();
+      })
+      .then(data => {
+        if (!data || !data.version) throw new Error("Invalid manifest file in git repository");
+        sendResponse({ success: true, version: data.version });
+      })
+      .catch(err => {
+        console.error("Failed to check Git project updates in background:", err);
+        sendResponse({ success: false, error: err.message });
+      });
+    return true;
   }
 });
 
